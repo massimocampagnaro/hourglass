@@ -24,6 +24,16 @@
     const SHOULDER_HW = 102;
     const NECK_HW = 6;
     const SHOULDER_T = 0.32;   // fraction of half-span where the bulge peaks
+    const FLIP_MS = 480;       // matches css var(--t-flip)
+    // The pour starts once the spin has covered ~3/4 of its 180°, not once
+    // it's fully upright — measured empirically since the css easing isn't
+    // linear (0.56 of FLIP_MS lands right around 135° with the current
+    // cubic-bezier). The last quarter-turn then finishes while sand is
+    // already sliding, which reads fine since the shell is nearly upright
+    // by that point — unlike starting the pour mid-spin at odd diagonals.
+    const POUR_START_MS = FLIP_MS * 0.56;
+    const TRANSFER_MIN_MS = 130; // pour-across duration for a near-empty bulb
+    const TRANSFER_MAX_MS = 560; // pour-across duration for a nearly-full bulb
 
     const TOP_DIP_MAX = 9;
     const BOTTOM_PEAK_MAX = 15;
@@ -117,9 +127,14 @@
             this.flipDeg = 0;
             this.parity = 0; // toggles each flip: which bulb currently drains vs fills
             this.resetOnFlip = false;
+            this._flipPending = false;
+            this._flipTimeoutId = null;
+            this._pourActive = false;
             this.onTick = null;
             this.onDone = null;
             this._done = false;
+            this._pourTransfers = [];
+            this._pourRafId = null;
 
             // full-glass boundary points (right side), split top/bottom
             this.rightTop = sampleBoundary(CAP_TOP_Y, NECK_Y, 4);
@@ -367,8 +382,10 @@
             fillShade.setAttribute('d', this._bulbShadeD(fillBulb, fillSurfaceY, 'fill'));
 
             // stream + grains always fall from the neck toward whichever
-            // bulb is currently filling, in that bulb's own "toward rim" direction
-            const streamOn = this.running && timeFrac < 1;
+            // bulb is currently filling, in that bulb's own "toward rim" direction.
+            // Suppressed while a post-flip pour is still settling, so the flow
+            // only resumes once the sand has actually finished resettling.
+            const streamOn = this.running && timeFrac < 1 && !this._pourActive;
             this.streamLine.setAttribute('y1', fmt(NECK_Y - fillBulb.dir * 4));
             this.streamLine.setAttribute('y2', fmt(fillSurfaceY - fillBulb.dir * 2));
             this.streamLine.style.opacity = streamOn ? '1' : '0';
@@ -412,7 +429,7 @@
             const landingY = dir > 0
                 ? Math.max(NECK_Y + 6, fillSurfaceY - 6)
                 : Math.min(NECK_Y - 6, fillSurfaceY + 6);
-            const flowing = this.running && this.elapsedMs < this.durationMs;
+            const flowing = this.running && this.elapsedMs < this.durationMs && !this._pourActive;
 
             if (flowing) {
                 this._spawnAccum += dtMs;
@@ -473,6 +490,11 @@
         }
 
         reset() {
+            if (this._flipTimeoutId) {
+                clearTimeout(this._flipTimeoutId);
+                this._flipTimeoutId = null;
+                this._flipPending = false;
+            }
             this.pause();
             this.elapsedMs = 0;
             this._done = false;
@@ -489,18 +511,184 @@
         // draining vs filling role, so sand keeps flowing top-to-bottom
         // on screen instead of reversing once the 180° rotation puts
         // the other bulb on top.
+        //
+        // Physically, flipping doesn't just relabel each bulb — gravity
+        // reverses for whatever sand was already sitting in it, so it
+        // slides/pours across to the opposite end of that same bulb
+        // (the bit that hadn't drained yet settles onto the rim; the
+        // bit that had piled up slides off toward the neck). That pour
+        // is what actually gets animated, per bulb, in _pourTransfer.
+        // Sequenced in two phases so each part reads clearly on its own:
+        // (1) the shell spins — sand stays exactly as it was, like a
+        // quick rigid flip too fast for anything to shift; (2) once it's
+        // upright again, the sand actually pours/settles into place.
+        // Doing both at once (spinning through odd diagonal angles while
+        // sand is also reorganizing) is what looked like noise before.
         flip() {
+            if (this._flipPending) return;
+            this._flipPending = true;
+
+            const oldTimeFrac = clamp(this.elapsedMs / this.durationMs, 0, 1);
+            const oldParity = this.parity;
+            const oldDrainKey = oldParity === 0 ? 'top' : 'bottom';
+            const oldFillKey = oldParity === 0 ? 'bottom' : 'top';
+            const oldDrainFrontFrac = 1 - FILL_CAP * (1 - oldTimeFrac);
+            const oldFillFrontFrac = FILL_CAP * oldTimeFrac;
+
             this.flipDeg += 180;
             this.wrap.parentElement.style.transform = `rotate(${this.flipDeg}deg)`;
-            this.parity = 1 - this.parity;
-
             this.pause();
-            this.elapsedMs = this.resetOnFlip ? 0 : clamp(this.durationMs - this.elapsedMs, 0, this.durationMs);
-            this._done = false;
-            this._updateSand(this.elapsedMs / this.durationMs);
-            this._clearParticles();
-            this._notifyTick();
-            this.start();
+
+            this._flipTimeoutId = setTimeout(() => {
+                this._flipPending = false;
+                this._flipTimeoutId = null;
+                this.parity = 1 - this.parity;
+                this.elapsedMs = this.resetOnFlip ? 0 : clamp(this.durationMs - this.elapsedMs, 0, this.durationMs);
+                this._done = false;
+                this._updateSand(this.elapsedMs / this.durationMs); // live paths jump to the final state, hidden underneath
+                this._clearParticles();
+                this._notifyTick();
+
+                this._cancelPourTransfers();
+                if (this.resetOnFlip) {
+                    this._pourActive = true;
+                    setTimeout(() => { this._pourActive = false; }, FLIP_MS);
+                    this._snapshotSandForCrossfade(FLIP_MS);
+                } else {
+                    this._startPourTransfer(oldDrainKey, 'drain', oldDrainFrontFrac);
+                    this._startPourTransfer(oldFillKey, 'fill', oldFillFrontFrac);
+                }
+
+                this.start();
+            }, POUR_START_MS);
+        }
+
+        _snapshotSandForCrossfade(durationMs) {
+            const clones = [this.sandTopPath, this.sandTopShade, this.sandBottomPath, this.sandBottomShade]
+                .map((node) => node.cloneNode(true));
+            clones.forEach((node) => {
+                node.style.transition = `opacity ${durationMs}ms ease`;
+                node.style.opacity = '1';
+                // insert above the live sand but below the neck stroke/stream
+                this.svg.insertBefore(node, this.streamLine);
+            });
+            // force layout so the browser registers opacity:1 before we
+            // transition to 0 — otherwise the change gets coalesced away
+            void clones[0].getBoundingClientRect();
+            requestAnimationFrame(() => {
+                clones.forEach((node) => { node.style.opacity = '0'; });
+            });
+            setTimeout(() => {
+                clones.forEach((node) => node.remove());
+            }, durationMs + 60);
+        }
+
+        _bulbPaths(key) {
+            return key === 'top'
+                ? { path: this.sandTopPath, shade: this.sandTopShade }
+                : { path: this.sandBottomPath, shade: this.sandBottomShade };
+        }
+
+        // A slab of sand of fixed width (`transferAmount`, in frontFrac
+        // units) sitting at one extreme of the bulb (rim if it was
+        // 'fill', neck if it was 'drain') and rigidly sliding across to
+        // rest at the OPPOSITE extreme. Because both ends of the slab
+        // move by the same lerp, its width never changes — one
+        // continuous connected mass the whole time, no gap opening up
+        // in the middle (which is what made the previous shrink+grow
+        // version, with two independently-sized regions, look like sand
+        // vanishing from one spot and reappearing from nowhere in another).
+        // Same constant "gravity" throughout — duration scales with sqrt of
+        // the DISTANCE the slab's centre has to travel, not with how much
+        // sand there is. A slab that already fills most of the bulb barely
+        // has to move (both its ends are already close to their targets);
+        // a thin sliver has to cross almost the whole bulb to reach the
+        // opposite end. Distance (in frontFrac units) is (1 - width).
+        _startPourTransfer(bulbKey, oldRole, oldFrontFrac) {
+            const bulb = this.bulbs[bulbKey];
+            const newRole = oldRole === 'drain' ? 'fill' : 'drain';
+            const transferAmount = clamp(oldRole === 'drain' ? 1 - oldFrontFrac : oldFrontFrac, 0, 1);
+            const travelDistance = clamp(1 - transferAmount, 0, 1);
+            const duration = TRANSFER_MIN_MS
+                + (TRANSFER_MAX_MS - TRANSFER_MIN_MS) * Math.sqrt(travelDistance);
+
+            const oldLo = oldRole === 'drain' ? oldFrontFrac : 0;
+            const oldHi = oldRole === 'drain' ? 1 : oldFrontFrac;
+            const newLo = newRole === 'drain' ? 1 - transferAmount : 0;
+            const newHi = newRole === 'drain' ? 1 : transferAmount;
+
+            const live = this._bulbPaths(bulbKey);
+            live.path.style.opacity = '0';
+            live.shade.style.opacity = '0';
+
+            const slabPath = el('path', { fill: 'url(#sandGradient)' });
+            this.svg.insertBefore(slabPath, this.streamLine);
+
+            const startTs = performance.now();
+            const transfer = {
+                bulbKey, live, slabPath,
+                tick: (now) => {
+                    const t = clamp((now - startTs) / duration, 0, 1);
+                    const p = smoothstep(t); // eases in and out — no abrupt snap at either end
+                    const lo = lerp(oldLo, newLo, p);
+                    const hi = lerp(oldHi, newHi, p);
+                    slabPath.setAttribute('d', this._bulbSlabD(bulb, lo, hi));
+                    return t >= 1;
+                },
+                finish: () => {
+                    slabPath.remove();
+                    live.path.style.opacity = '';
+                    live.shade.style.opacity = '';
+                },
+            };
+            this._pourActive = true;
+            this._pourTransfers.push(transfer);
+            this._ensurePourLoop();
+        }
+
+        // Renders the sand between two frontFrac bounds (0=rim,1=neck)
+        // as one plain contiguous region — used only for the sliding
+        // transfer slab, which doesn't need the dip/peak surface bump
+        // that the live drain/fill rendering has.
+        _bulbSlabD(bulb, loFrontFrac, hiFrontFrac) {
+            const yA = this._frontY(bulb, clamp(loFrontFrac, 0, 1));
+            const yB = this._frontY(bulb, clamp(hiFrontFrac, 0, 1));
+            const yTop = Math.min(yA, yB);
+            const yBottom = Math.max(yA, yB);
+            const pts = bulb.points.filter((p) => p.y >= yTop && p.y <= yBottom);
+            if (pts.length < 2) return '';
+            const leftPts = pts.map((p) => ({ x: 2 * CX - p.x, y: p.y })).reverse();
+            return `M ${fmt(pts[0].x)} ${fmt(pts[0].y)} `
+                + pointsToLineSegs(pts.slice(1)) + ' '
+                + pointsToLineSegs(leftPts) + ' Z';
+        }
+
+        _ensurePourLoop() {
+            if (this._pourRafId) return;
+            const step = (now) => {
+                for (let i = this._pourTransfers.length - 1; i >= 0; i--) {
+                    const tr = this._pourTransfers[i];
+                    const done = tr.tick(now);
+                    if (done) {
+                        tr.finish();
+                        this._pourTransfers.splice(i, 1);
+                    }
+                }
+                if (this._pourTransfers.length) {
+                    this._pourRafId = requestAnimationFrame(step);
+                } else {
+                    this._pourRafId = null;
+                    this._pourActive = false;
+                }
+            };
+            this._pourRafId = requestAnimationFrame(step);
+        }
+
+        _cancelPourTransfers() {
+            if (this._pourRafId) cancelAnimationFrame(this._pourRafId);
+            this._pourRafId = null;
+            this._pourActive = false;
+            this._pourTransfers.splice(0).forEach((tr) => tr.finish());
         }
 
         _clearParticles() {
