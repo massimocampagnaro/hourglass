@@ -25,7 +25,7 @@
     <div class="stage">
         <div class="hourglass-shell" id="hourglassShell">
             <div class="hourglass-canvas-wrap" id="hourglassWrap">
-                <!-- SVG glass + sand injected here by js/hourglass.js -->
+                <!-- SVG glass + sand injected here by hourglass.js -->
                 <canvas id="grainCanvas" class="grain-canvas"></canvas>
             </div>
         </div>
@@ -42,6 +42,7 @@
                 <button type="button" class="preset-btn" data-minutes="5">5</button>
                 <button type="button" class="preset-btn" data-minutes="25">25</button>
                 <button type="button" class="preset-btn" data-minutes="30">30</button>
+                <button type="button" class="preset-btn" data-minutes="60">60</button>
             </div>
 
             <div class="button-row">
@@ -56,12 +57,13 @@
             </label>
 
             <p class="hint">Click the hourglass to flip it over</p>
+            <p class="hint">Space to start/pause &middot; R to reset &middot; F to flip</p>
         </div>
     </div>
 </main>
 
 <footer class="site-footer">
-    <p>Vanilla HTML · CSS · JS — no dependencies</p>
+    <p>© 2026 Massimo Campagnaro</p>
 </footer>
 
 <script src="js/hourglass.js"></script>

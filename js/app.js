@@ -84,5 +84,26 @@
         setMinutes(Number(btn.dataset.minutes));
     });
 
+    document.addEventListener('keydown', (e) => {
+        // Skip whenever focus is on a control that already has its own
+        // keyboard handling (typing, or Space/Enter activating a button) —
+        // otherwise Space would both natively activate the focused button
+        // AND trigger startPauseBtn here, firing two different actions.
+        const tag = document.activeElement && document.activeElement.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+        if (e.code === 'Space') {
+            e.preventDefault();
+            startPauseBtn.click();
+        } else if (e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+            resetBtn.click();
+        } else if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            shell.click();
+        }
+    });
+
     setMinutes(5);
 })();
