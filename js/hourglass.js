@@ -12,107 +12,126 @@
     const SVG_NS = 'http://www.w3.org/2000/svg';
 
     // ─── Geometry constants (viewBox units) ────────────────────
-    const VB_W = 320;
-    const VB_H = 560;
-    const CX = VB_W / 2;
+    const VIEWBOX_WIDTH = 320;
+    const VIEWBOX_HEIGHT = 560;
+    const CENTER_X = VIEWBOX_WIDTH / 2;
 
-    const CAP_TOP_Y = 46;
-    const CAP_BOTTOM_Y = VB_H - 46;
-    const NECK_Y = VB_H / 2;
+    const TOP_RIM_Y = 46;
+    const BOTTOM_RIM_Y = VIEWBOX_HEIGHT - 46;
+    const NECK_Y = VIEWBOX_HEIGHT / 2;
 
-    const RIM_HW = 82;
-    const SHOULDER_HW = 102;
-    const NECK_HW = 6;
-    const SHOULDER_T = 0.32;   // fraction of half-span where the bulge peaks
-    const FLIP_MS = 480;       // matches css var(--t-flip)
+    const RIM_HALF_WIDTH = 82;
+    const SHOULDER_HALF_WIDTH = 102;
+    const NECK_HALF_WIDTH = 6;
+    const SHOULDER_FRACTION = 0.32; // how far down the rim-to-neck span the bulge peaks (0=rim, 1=neck)
+
+    const SPIN_DURATION_MS = 480; // matches css var(--t-flip)
     // The pour starts once the spin has covered ~3/4 of its 180°, not once
     // it's fully upright — measured empirically since the css easing isn't
-    // linear (0.56 of FLIP_MS lands right around 135° with the current
-    // cubic-bezier). The last quarter-turn then finishes while sand is
-    // already sliding, which reads fine since the shell is nearly upright
-    // by that point — unlike starting the pour mid-spin at odd diagonals.
-    const POUR_START_MS = FLIP_MS * 0.56;
+    // linear (0.56 of SPIN_DURATION_MS lands right around 135° with the
+    // current cubic-bezier). The last quarter-turn then finishes while sand
+    // is already sliding, which reads fine since the shell is nearly
+    // upright by that point — unlike starting the pour mid-spin at odd
+    // diagonal angles.
+    const POUR_START_DELAY_MS = SPIN_DURATION_MS * 0.56;
     const TRANSFER_MIN_MS = 130; // pour-across duration for a near-empty bulb
     const TRANSFER_MAX_MS = 560; // pour-across duration for a nearly-full bulb
 
-    const TOP_DIP_MAX = 9;
-    const BOTTOM_PEAK_MAX = 15;
-    const FILL_CAP = 0.86; // sand never fills more than this fraction of a
-                            // bulb's geometric volume, so it never appears
-                            // to touch the rim (top) or crowd the neck (bottom)
+    const DRAIN_DIP_MAX = 9;   // max crater depth on a draining surface
+    const FILL_PEAK_MAX = 15;  // max mound height on a filling surface
+    const MAX_FILL_FRACTION = 0.86; // sand never fills more than this fraction of a
+                                     // bulb's geometric volume, so it never appears
+                                     // to touch the rim (top) or crowd the neck (bottom)
 
     function lerp(a, b, t) { return a + (b - a) * t; }
-    function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+    function clamp(value, lo, hi) { return value < lo ? lo : value > hi ? hi : value; }
     function smoothstep(t) { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); }
 
-    // width profile: u=0 at rim, u=1 at neck -> returns half-width
-    function widthProfile(u) {
-        if (u <= SHOULDER_T) {
-            const t = u / SHOULDER_T;
-            return lerp(RIM_HW, SHOULDER_HW, smoothstep(t));
+    // Half-width of the glass between rim and neck.
+    // neckProgress: 0 at the rim, 1 at the neck.
+    function halfWidthProfile(neckProgress) {
+        if (neckProgress <= SHOULDER_FRACTION) {
+            const t = neckProgress / SHOULDER_FRACTION;
+            return lerp(RIM_HALF_WIDTH, SHOULDER_HALF_WIDTH, smoothstep(t));
         }
-        const t = (u - SHOULDER_T) / (1 - SHOULDER_T);
-        return lerp(SHOULDER_HW, NECK_HW, smoothstep(t));
+        const t = (neckProgress - SHOULDER_FRACTION) / (1 - SHOULDER_FRACTION);
+        return lerp(SHOULDER_HALF_WIDTH, NECK_HALF_WIDTH, smoothstep(t));
     }
 
+    // Half-width of the glass at an absolute SVG y — picks the top or
+    // bottom bulb's profile depending on which side of the neck we're on.
     function halfWidthAt(y) {
         if (y <= NECK_Y) {
-            const u = (y - CAP_TOP_Y) / (NECK_Y - CAP_TOP_Y);
-            return widthProfile(clamp(u, 0, 1));
+            const neckProgress = (y - TOP_RIM_Y) / (NECK_Y - TOP_RIM_Y);
+            return halfWidthProfile(clamp(neckProgress, 0, 1));
         }
-        const v = (CAP_BOTTOM_Y - y) / (CAP_BOTTOM_Y - NECK_Y);
-        return widthProfile(clamp(v, 0, 1));
+        const neckProgress = (BOTTOM_RIM_Y - y) / (BOTTOM_RIM_Y - NECK_Y);
+        return halfWidthProfile(clamp(neckProgress, 0, 1));
     }
 
     // ─── Cumulative "area" tables for volume-correct sand levels ──
-    function buildAreaTable(yLo, yHi, steps) {
-        const ys = new Array(steps + 1);
-        const hws = new Array(steps + 1);
-        const cum = new Array(steps + 1);
-        const dy = (yHi - yLo) / steps;
-        cum[0] = 0;
+    // Builds a lookup table of (y, cumulative area) samples by integrating
+    // the glass's width from yStart to yEnd. This lets us convert "how much
+    // of this bulb's volume is filled" into an actual y coordinate, so sand
+    // levels move at a physically plausible (non-linear) rate instead of
+    // just interpolating height in a straight line.
+    function buildAreaTable(yStart, yEnd, steps) {
+        const sampledYs = new Array(steps + 1);
+        const sampledHalfWidths = new Array(steps + 1);
+        const cumulativeArea = new Array(steps + 1);
+        const dy = (yEnd - yStart) / steps;
+        cumulativeArea[0] = 0;
         for (let i = 0; i <= steps; i++) {
-            const y = yLo + dy * i;
-            ys[i] = y;
-            hws[i] = halfWidthAt(y);
-            if (i > 0) cum[i] = cum[i - 1] + (hws[i - 1] + hws[i]) / 2 * dy;
+            const y = yStart + dy * i;
+            sampledYs[i] = y;
+            sampledHalfWidths[i] = halfWidthAt(y);
+            if (i > 0) {
+                cumulativeArea[i] = cumulativeArea[i - 1]
+                    + (sampledHalfWidths[i - 1] + sampledHalfWidths[i]) / 2 * dy;
+            }
         }
-        return { ys, hws, cum, total: cum[steps] };
+        return { sampledYs, cumulativeArea, totalArea: cumulativeArea[steps] };
     }
 
-    function findYForCum(table, target) {
-        const t = clamp(target, 0, table.total);
-        const { ys, cum } = table;
-        let lo = 0, hi = cum.length - 1;
+    // Inverse lookup: given a target cumulative area, find the y where the
+    // table's running total reaches it (binary search, then interpolate
+    // between the two bracketing samples for sub-step precision).
+    function yForCumulativeArea(table, targetArea) {
+        const clampedTarget = clamp(targetArea, 0, table.totalArea);
+        const { sampledYs, cumulativeArea } = table;
+        let lo = 0, hi = cumulativeArea.length - 1;
         while (hi - lo > 1) {
             const mid = (lo + hi) >> 1;
-            if (cum[mid] < t) lo = mid; else hi = mid;
+            if (cumulativeArea[mid] < clampedTarget) lo = mid; else hi = mid;
         }
-        const span = cum[hi] - cum[lo];
-        const frac = span > 0 ? (t - cum[lo]) / span : 0;
-        return lerp(ys[lo], ys[hi], frac);
+        const span = cumulativeArea[hi] - cumulativeArea[lo];
+        const frac = span > 0 ? (clampedTarget - cumulativeArea[lo]) / span : 0;
+        return lerp(sampledYs[lo], sampledYs[hi], frac);
     }
 
     // ─── Boundary point sampling (dense, used as straight segments) ──
-    function sampleBoundary(yLo, yHi, step) {
-        const pts = [];
-        for (let y = yLo; y <= yHi; y += step) {
-            pts.push({ x: CX + halfWidthAt(y), y });
+    // Samples the glass wall's right-hand edge into closely-spaced points.
+    // Dense enough (every 4 units) that plain straight segments between
+    // them read as a smooth curve — no actual bezier math needed.
+    function sampleWallPoints(yStart, yEnd, stepY) {
+        const points = [];
+        for (let y = yStart; y <= yEnd; y += stepY) {
+            points.push({ x: CENTER_X + halfWidthAt(y), y });
         }
-        pts.push({ x: CX + halfWidthAt(yHi), y: yHi });
-        return pts;
+        points.push({ x: CENTER_X + halfWidthAt(yEnd), y: yEnd });
+        return points;
     }
 
-    function fmt(n) { return Math.round(n * 100) / 100; }
+    function roundCoord(n) { return Math.round(n * 100) / 100; }
 
-    function pointsToLineSegs(pts) {
-        return pts.map((p) => `L ${fmt(p.x)} ${fmt(p.y)}`).join(' ');
+    function pointsToLineSegments(points) {
+        return points.map((p) => `L ${roundCoord(p.x)} ${roundCoord(p.y)}`).join(' ');
     }
 
-    function el(tag, attrs) {
-        const e = document.createElementNS(SVG_NS, tag);
-        for (const k in attrs) e.setAttribute(k, attrs[k]);
-        return e;
+    function createSvgElement(tag, attrs) {
+        const element = document.createElementNS(SVG_NS, tag);
+        for (const key in attrs) element.setAttribute(key, attrs[key]);
+        return element;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -122,9 +141,9 @@
             this.durationMs = 5 * 60 * 1000;
             this.elapsedMs = 0;
             this.running = false;
-            this.lastTs = null;
+            this.lastFrameTimestamp = null;
             this.rafId = null;
-            this.flipDeg = 0;
+            this.flipRotationDeg = 0;
             this.parity = 0; // toggles each flip: which bulb currently drains vs fills
             this.resetOnFlip = false;
             this._flipPending = false;
@@ -137,26 +156,27 @@
             this._pourRafId = null;
 
             // full-glass boundary points (right side), split top/bottom
-            this.rightTop = sampleBoundary(CAP_TOP_Y, NECK_Y, 4);
-            this.rightBottom = sampleBoundary(NECK_Y, CAP_BOTTOM_Y, 4);
+            this.rightTopPoints = sampleWallPoints(TOP_RIM_Y, NECK_Y, 4);
+            this.rightBottomPoints = sampleWallPoints(NECK_Y, BOTTOM_RIM_Y, 4);
 
-            this.topTable = buildAreaTable(CAP_TOP_Y, NECK_Y, 120);
-            this.bottomTable = buildAreaTable(NECK_Y, CAP_BOTTOM_Y, 120);
+            this.topAreaTable = buildAreaTable(TOP_RIM_Y, NECK_Y, 120);
+            this.bottomAreaTable = buildAreaTable(NECK_Y, BOTTOM_RIM_Y, 120);
 
-            // bulb descriptors: fixed geometry, independent of which role
+            // Bulb descriptors: fixed geometry, independent of which role
             // (drain/fill) each one is currently playing. isNeckFirst tells
             // whether the neck sits at the low-y or high-y end of `points`;
-            // dir points from the neck toward this bulb's own rim.
+            // towardRimSign is +1/-1, pointing from the neck toward this
+            // bulb's own rim in SVG y-space.
             this.bulbs = {
                 top: {
-                    points: this.rightTop, table: this.topTable,
-                    neckY: NECK_Y, rimY: CAP_TOP_Y, isNeckFirst: false,
-                    dir: Math.sign(CAP_TOP_Y - NECK_Y),
+                    points: this.rightTopPoints, areaTable: this.topAreaTable,
+                    neckY: NECK_Y, rimY: TOP_RIM_Y, isNeckFirst: false,
+                    towardRimSign: Math.sign(TOP_RIM_Y - NECK_Y),
                 },
                 bottom: {
-                    points: this.rightBottom, table: this.bottomTable,
-                    neckY: NECK_Y, rimY: CAP_BOTTOM_Y, isNeckFirst: true,
-                    dir: Math.sign(CAP_BOTTOM_Y - NECK_Y),
+                    points: this.rightBottomPoints, areaTable: this.bottomAreaTable,
+                    neckY: NECK_Y, rimY: BOTTOM_RIM_Y, isNeckFirst: true,
+                    towardRimSign: Math.sign(BOTTOM_RIM_Y - NECK_Y),
                 },
             };
 
@@ -166,12 +186,12 @@
         }
 
         _buildSvg() {
-            const svg = el('svg', {
-                viewBox: `0 0 ${VB_W} ${VB_H}`,
+            const svg = createSvgElement('svg', {
+                viewBox: `0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`,
                 'aria-hidden': 'true',
             });
 
-            const defs = el('defs', {});
+            const defs = createSvgElement('defs', {});
             defs.innerHTML = `
                 <linearGradient id="glassFill" x1="0" y1="0" x2="1" y2="1">
                     <stop offset="0%" stop-color="rgba(210,232,245,0.14)"/>
@@ -212,8 +232,8 @@
             `;
             svg.appendChild(defs);
 
-            // glass fill + outline (built once, static)
-            const glassPath = el('path', {
+            // glass fill + outline (built once, static — never touched again)
+            const glassPath = createSvgElement('path', {
                 d: this._glassOutlineD(),
                 fill: 'url(#glassFill)',
                 stroke: 'url(#glassStroke)',
@@ -224,41 +244,40 @@
             svg.appendChild(glassPath);
 
             // rim caps (subtle lip top & bottom)
-            svg.appendChild(el('ellipse', {
-                cx: CX, cy: CAP_TOP_Y, rx: RIM_HW, ry: 5,
+            svg.appendChild(createSvgElement('ellipse', {
+                cx: CENTER_X, cy: TOP_RIM_Y, rx: RIM_HALF_WIDTH, ry: 5,
                 fill: 'none', stroke: 'rgba(225,240,250,0.55)', 'stroke-width': 2,
             }));
-            svg.appendChild(el('ellipse', {
-                cx: CX, cy: CAP_BOTTOM_Y, rx: RIM_HW, ry: 5,
+            svg.appendChild(createSvgElement('ellipse', {
+                cx: CENTER_X, cy: BOTTOM_RIM_Y, rx: RIM_HALF_WIDTH, ry: 5,
                 fill: 'none', stroke: 'rgba(225,240,250,0.55)', 'stroke-width': 2,
             }));
 
             // glossy highlight streaks (decorative, static) — trace the actual
             // bulb curvature, inset from the wall, faded at both ends
-            svg.appendChild(el('path', {
-                d: this._highlightD(this.rightTop, 0.72),
+            svg.appendChild(createSvgElement('path', {
+                d: this._highlightPathD(this.rightTopPoints, 0.72),
                 fill: 'none', stroke: 'url(#highlightFade)', 'stroke-width': 6,
                 'stroke-linecap': 'round',
             }));
-            svg.appendChild(el('path', {
-                d: this._highlightD(this.rightBottom, 0.72),
+            svg.appendChild(createSvgElement('path', {
+                d: this._highlightPathD(this.rightBottomPoints, 0.72),
                 fill: 'none', stroke: 'url(#highlightFade)', 'stroke-width': 6,
                 'stroke-linecap': 'round',
             }));
 
-            // sand (dynamic)
-            this.sandTopPath = el('path', { fill: 'url(#sandGradient)' });
-            this.sandTopShade = el('path', { fill: 'url(#sandPileShade)', opacity: 0.6 });
-            this.sandBottomPath = el('path', { fill: 'url(#sandGradient)' });
-            this.sandBottomShade = el('path', { fill: 'url(#sandPileShade)', opacity: 0.7 });
+            // sand (dynamic — redrawn every frame by _updateSand)
+            this.sandTopPath = createSvgElement('path', { fill: 'url(#sandGradient)' });
+            this.sandTopShade = createSvgElement('path', { fill: 'url(#sandPileShade)', opacity: 0.6 });
+            this.sandBottomPath = createSvgElement('path', { fill: 'url(#sandGradient)' });
+            this.sandBottomShade = createSvgElement('path', { fill: 'url(#sandPileShade)', opacity: 0.7 });
             svg.appendChild(this.sandTopPath);
             svg.appendChild(this.sandTopShade);
             svg.appendChild(this.sandBottomPath);
             svg.appendChild(this.sandBottomShade);
 
-            // falling stream
-            this.streamLine = el('line', {
-                x1: CX, x2: CX, y1: NECK_Y - 4, y2: NECK_Y + 40,
+            this.streamLine = createSvgElement('line', {
+                x1: CENTER_X, x2: CENTER_X, y1: NECK_Y - 4, y2: NECK_Y + 40,
                 stroke: 'url(#streamGradient)', 'stroke-width': 2.4,
                 'stroke-dasharray': '3 5', filter: 'url(#softGlow)',
             });
@@ -266,7 +285,7 @@
 
             // re-draw glass outline stroke on top of sand at the neck so the
             // narrow waist always reads crisply over the falling stream
-            svg.appendChild(el('path', {
+            svg.appendChild(createSvgElement('path', {
                 d: this._glassOutlineD(),
                 fill: 'none',
                 stroke: 'url(#glassStroke)',
@@ -280,31 +299,32 @@
             this.svg = svg;
         }
 
-        // a soft reflection that hugs one bulb's real curvature, inset from
+        // A soft reflection that hugs one bulb's real curvature, inset from
         // the wall and clipped away from the rim/neck so it reads as a
-        // floating streak of light rather than a straight ruled line
-        _highlightD(sidePoints, inset) {
-            const n = sidePoints.length;
-            const from = Math.floor(n * 0.14);
-            const to = Math.ceil(n * 0.8);
-            const pts = sidePoints.slice(from, to)
-                .map((p) => ({ x: CX - (p.x - CX) * inset, y: p.y }));
-            return `M ${fmt(pts[0].x)} ${fmt(pts[0].y)} ` + pointsToLineSegs(pts.slice(1));
+        // floating streak of light rather than a straight ruled line.
+        _highlightPathD(sidePoints, inset) {
+            const pointCount = sidePoints.length;
+            const startIndex = Math.floor(pointCount * 0.14);
+            const endIndex = Math.ceil(pointCount * 0.8);
+            const insetPoints = sidePoints.slice(startIndex, endIndex)
+                .map((p) => ({ x: CENTER_X - (p.x - CENTER_X) * inset, y: p.y }));
+            return `M ${roundCoord(insetPoints[0].x)} ${roundCoord(insetPoints[0].y)} `
+                + pointsToLineSegments(insetPoints.slice(1));
         }
 
         _glassOutlineD() {
-            const rimTL = { x: CX - RIM_HW, y: CAP_TOP_Y };
-            const rimTR = { x: CX + RIM_HW, y: CAP_TOP_Y };
-            const rimBR = { x: CX + RIM_HW, y: CAP_BOTTOM_Y };
-            const rimBL = { x: CX - RIM_HW, y: CAP_BOTTOM_Y };
+            const rimTopLeft = { x: CENTER_X - RIM_HALF_WIDTH, y: TOP_RIM_Y };
+            const rimTopRight = { x: CENTER_X + RIM_HALF_WIDTH, y: TOP_RIM_Y };
+            const rimBottomLeft = { x: CENTER_X - RIM_HALF_WIDTH, y: BOTTOM_RIM_Y };
 
-            const rightPts = this.rightTop.concat(this.rightBottom.slice(1));
-            const leftPts = rightPts.map((p) => ({ x: 2 * CX - p.x, y: p.y })).reverse();
+            const rightPoints = this.rightTopPoints.concat(this.rightBottomPoints.slice(1));
+            const leftPoints = rightPoints.map((p) => ({ x: 2 * CENTER_X - p.x, y: p.y })).reverse();
 
-            let d = `M ${fmt(rimTL.x)} ${fmt(rimTL.y)} L ${fmt(rimTR.x)} ${fmt(rimTR.y)} `;
-            d += pointsToLineSegs(rightPts) + ' ';
-            d += `L ${fmt(rimBL.x)} ${fmt(rimBL.y)} `;
-            d += pointsToLineSegs(leftPts) + ' Z';
+            let d = `M ${roundCoord(rimTopLeft.x)} ${roundCoord(rimTopLeft.y)} `
+                + `L ${roundCoord(rimTopRight.x)} ${roundCoord(rimTopRight.y)} `;
+            d += pointsToLineSegments(rightPoints) + ' ';
+            d += `L ${roundCoord(rimBottomLeft.x)} ${roundCoord(rimBottomLeft.y)} `;
+            d += pointsToLineSegments(leftPoints) + ' Z';
             return d;
         }
 
@@ -317,54 +337,54 @@
         // always ends up on the rim side.
         _frontY(bulb, frontFrac) {
             frontFrac = clamp(frontFrac, 0, 1);
-            const target = bulb.isNeckFirst
-                ? bulb.table.total * (1 - frontFrac)
-                : bulb.table.total * frontFrac;
-            return findYForCum(bulb.table, target);
+            const targetArea = bulb.isNeckFirst
+                ? bulb.areaTable.totalArea * (1 - frontFrac)
+                : bulb.areaTable.totalArea * frontFrac;
+            return yForCumulativeArea(bulb.areaTable, targetArea);
         }
 
         _bulbSandD(bulb, surfaceY, role, frontFrac, bumpMax) {
-            const { points, isNeckFirst, neckY, rimY, dir } = bulb;
+            const { points, isNeckFirst, neckY, rimY, towardRimSign } = bulb;
             surfaceY = clamp(surfaceY, Math.min(neckY, rimY), Math.max(neckY, rimY));
 
             const sandOnHighY = role === 'drain' ? !isNeckFirst : isNeckFirst;
-            let pts = sandOnHighY
+            let rightPoints = sandOnHighY
                 ? points.filter((p) => p.y >= surfaceY)
                 : points.filter((p) => p.y <= surfaceY);
-            if (pts.length < 2) return '';
-            if (!sandOnHighY) pts = pts.slice().reverse(); // normalize to [surface, ..., far]
+            if (rightPoints.length < 2) return '';
+            if (!sandOnHighY) rightPoints = rightPoints.slice().reverse(); // normalize to [surface, ..., far]
 
-            const leftPts = pts.map((p) => ({ x: 2 * CX - p.x, y: p.y })).reverse();
-            const hwSurf = halfWidthAt(surfaceY);
+            const leftPoints = rightPoints.map((p) => ({ x: 2 * CENTER_X - p.x, y: p.y })).reverse();
+            const surfaceHalfWidth = halfWidthAt(surfaceY);
 
-            const distToNeck = Math.abs(surfaceY - neckY);
-            const bump = bumpMax * (0.15 + 0.85 * frontFrac) * clamp(distToNeck / 40, 0, 1);
-            const bumpY = surfaceY - bump * dir; // bump always leans toward the neck
+            const distanceToNeck = Math.abs(surfaceY - neckY);
+            const bump = bumpMax * (0.15 + 0.85 * frontFrac) * clamp(distanceToNeck / 40, 0, 1);
+            const bumpY = surfaceY - bump * towardRimSign; // bump always leans toward the neck
 
-            let d = `M ${fmt(CX - hwSurf)} ${fmt(surfaceY)} `;
-            d += `Q ${fmt(CX)} ${fmt(bumpY)} ${fmt(CX + hwSurf)} ${fmt(surfaceY)} `;
-            d += pointsToLineSegs(pts) + ' ';
-            d += pointsToLineSegs(leftPts) + ' Z';
+            let d = `M ${roundCoord(CENTER_X - surfaceHalfWidth)} ${roundCoord(surfaceY)} `;
+            d += `Q ${roundCoord(CENTER_X)} ${roundCoord(bumpY)} ${roundCoord(CENTER_X + surfaceHalfWidth)} ${roundCoord(surfaceY)} `;
+            d += pointsToLineSegments(rightPoints) + ' ';
+            d += pointsToLineSegments(leftPoints) + ' Z';
             return d;
         }
 
         _bulbShadeD(bulb, surfaceY, role) {
-            const { neckY, rimY, dir } = bulb;
+            const { neckY, rimY, towardRimSign } = bulb;
             surfaceY = clamp(surfaceY, Math.min(neckY, rimY), Math.max(neckY, rimY));
-            const hwSurf = halfWidthAt(surfaceY);
-            const shadeDir = role === 'drain' ? -dir : dir;
-            const bandY = clamp(surfaceY + shadeDir * 36, Math.min(neckY, rimY), Math.max(neckY, rimY));
-            const hwBand = halfWidthAt(bandY);
-            return `M ${fmt(CX - hwSurf)} ${fmt(surfaceY)} ` +
-                `L ${fmt(CX + hwSurf)} ${fmt(surfaceY)} ` +
-                `L ${fmt(CX + hwBand)} ${fmt(bandY)} ` +
-                `L ${fmt(CX - hwBand)} ${fmt(bandY)} Z`;
+            const surfaceHalfWidth = halfWidthAt(surfaceY);
+            const shadeDirSign = role === 'drain' ? -towardRimSign : towardRimSign;
+            const bandY = clamp(surfaceY + shadeDirSign * 36, Math.min(neckY, rimY), Math.max(neckY, rimY));
+            const bandHalfWidth = halfWidthAt(bandY);
+            return `M ${roundCoord(CENTER_X - surfaceHalfWidth)} ${roundCoord(surfaceY)} `
+                + `L ${roundCoord(CENTER_X + surfaceHalfWidth)} ${roundCoord(surfaceY)} `
+                + `L ${roundCoord(CENTER_X + bandHalfWidth)} ${roundCoord(bandY)} `
+                + `L ${roundCoord(CENTER_X - bandHalfWidth)} ${roundCoord(bandY)} Z`;
         }
 
         _updateSand(timeFrac) {
             timeFrac = clamp(timeFrac, 0, 1);
-            const drainFrontFrac = 1 - FILL_CAP * (1 - timeFrac);
-            const fillFrontFrac = FILL_CAP * timeFrac;
+            const drainFrontFrac = 1 - MAX_FILL_FRACTION * (1 - timeFrac);
+            const fillFrontFrac = MAX_FILL_FRACTION * timeFrac;
 
             const drainBulb = this.parity === 0 ? this.bulbs.top : this.bulbs.bottom;
             const fillBulb = this.parity === 0 ? this.bulbs.bottom : this.bulbs.top;
@@ -376,22 +396,22 @@
             const drainSurfaceY = this._frontY(drainBulb, drainFrontFrac);
             const fillSurfaceY = this._frontY(fillBulb, fillFrontFrac);
 
-            drainPath.setAttribute('d', this._bulbSandD(drainBulb, drainSurfaceY, 'drain', drainFrontFrac, TOP_DIP_MAX));
+            drainPath.setAttribute('d', this._bulbSandD(drainBulb, drainSurfaceY, 'drain', drainFrontFrac, DRAIN_DIP_MAX));
             drainShade.setAttribute('d', this._bulbShadeD(drainBulb, drainSurfaceY, 'drain'));
-            fillPath.setAttribute('d', this._bulbSandD(fillBulb, fillSurfaceY, 'fill', fillFrontFrac, BOTTOM_PEAK_MAX));
+            fillPath.setAttribute('d', this._bulbSandD(fillBulb, fillSurfaceY, 'fill', fillFrontFrac, FILL_PEAK_MAX));
             fillShade.setAttribute('d', this._bulbShadeD(fillBulb, fillSurfaceY, 'fill'));
 
             // stream + grains always fall from the neck toward whichever
             // bulb is currently filling, in that bulb's own "toward rim" direction.
             // Suppressed while a post-flip pour is still settling, so the flow
             // only resumes once the sand has actually finished resettling.
-            const streamOn = this.running && timeFrac < 1 && !this._pourActive;
-            this.streamLine.setAttribute('y1', fmt(NECK_Y - fillBulb.dir * 4));
-            this.streamLine.setAttribute('y2', fmt(fillSurfaceY - fillBulb.dir * 2));
-            this.streamLine.style.opacity = streamOn ? '1' : '0';
+            const streamVisible = this.running && timeFrac < 1 && !this._pourActive;
+            this.streamLine.setAttribute('y1', roundCoord(NECK_Y - fillBulb.towardRimSign * 4));
+            this.streamLine.setAttribute('y2', roundCoord(fillSurfaceY - fillBulb.towardRimSign * 2));
+            this.streamLine.style.opacity = streamVisible ? '1' : '0';
 
             this._fillSurfaceY = fillSurfaceY;
-            this._fillDir = fillBulb.dir;
+            this._fillDir = fillBulb.towardRimSign;
         }
 
         // ─── Grain particles (canvas overlay) ──────────────────
@@ -399,7 +419,7 @@
             this.canvas = this.wrap.querySelector('.grain-canvas');
             this.ctx = this.canvas.getContext('2d');
             this.particles = [];
-            this._spawnAccum = 0;
+            this._spawnAccumMs = 0;
             this._resizeCanvas();
             if (window.ResizeObserver) {
                 new ResizeObserver(() => this._resizeCanvas()).observe(this.wrap);
@@ -413,53 +433,53 @@
             const dpr = window.devicePixelRatio || 1;
             this.canvas.width = Math.max(1, Math.round(rect.width * dpr));
             this.canvas.height = Math.max(1, Math.round(rect.height * dpr));
-            this._scaleX = this.canvas.width / VB_W;
-            this._scaleY = this.canvas.height / VB_H;
+            this._canvasScaleX = this.canvas.width / VIEWBOX_WIDTH;
+            this._canvasScaleY = this.canvas.height / VIEWBOX_HEIGHT;
         }
 
         _stepParticles(dtMs) {
             const ctx = this.ctx;
-            ctx.setTransform(this._scaleX, 0, 0, this._scaleY, 0, 0);
-            ctx.clearRect(0, 0, VB_W, VB_H);
+            ctx.setTransform(this._canvasScaleX, 0, 0, this._canvasScaleY, 0, 0);
+            ctx.clearRect(0, 0, VIEWBOX_WIDTH, VIEWBOX_HEIGHT);
 
             // grains always fall from the neck toward whichever bulb is
-            // currently filling — `dir` picks which way that is in SVG-space
-            const dir = this._fillDir || 1;
+            // currently filling — `fallDirSign` picks which way that is in SVG-space
+            const fallDirSign = this._fillDir || 1;
             const fillSurfaceY = this._fillSurfaceY != null ? this._fillSurfaceY : NECK_Y;
-            const landingY = dir > 0
+            const landingY = fallDirSign > 0
                 ? Math.max(NECK_Y + 6, fillSurfaceY - 6)
                 : Math.min(NECK_Y - 6, fillSurfaceY + 6);
             const flowing = this.running && this.elapsedMs < this.durationMs && !this._pourActive;
 
             if (flowing) {
-                this._spawnAccum += dtMs;
-                const interval = 55;
-                while (this._spawnAccum > interval && this.particles.length < 26) {
-                    this._spawnAccum -= interval;
+                this._spawnAccumMs += dtMs;
+                const spawnIntervalMs = 55;
+                while (this._spawnAccumMs > spawnIntervalMs && this.particles.length < 26) {
+                    this._spawnAccumMs -= spawnIntervalMs;
                     this.particles.push({
-                        x: CX + (Math.random() - 0.5) * NECK_HW * 1.1,
-                        y: NECK_Y - dir * 2,
-                        vy: 40 * dir,
+                        x: CENTER_X + (Math.random() - 0.5) * NECK_HALF_WIDTH * 1.1,
+                        y: NECK_Y - fallDirSign * 2,
+                        vy: 40 * fallDirSign,
                         r: 1 + Math.random() * 1.1,
                     });
                 }
             } else {
-                this._spawnAccum = 0;
+                this._spawnAccumMs = 0;
             }
 
             const dt = dtMs / 1000;
             ctx.fillStyle = '#fbe3a6';
             for (let i = this.particles.length - 1; i >= 0; i--) {
-                const p = this.particles[i];
-                p.vy += 260 * dt * dir;
-                p.y += p.vy * dt;
-                if (dir > 0 ? p.y >= landingY : p.y <= landingY) {
+                const grain = this.particles[i];
+                grain.vy += 260 * dt * fallDirSign;
+                grain.y += grain.vy * dt;
+                if (fallDirSign > 0 ? grain.y >= landingY : grain.y <= landingY) {
                     this.particles.splice(i, 1);
                     continue;
                 }
                 ctx.globalAlpha = 0.9;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.arc(grain.x, grain.y, grain.r, 0, Math.PI * 2);
                 ctx.fill();
             }
             ctx.globalAlpha = 1;
@@ -479,8 +499,8 @@
         start() {
             if (this.running || this._done) return;
             this.running = true;
-            this.lastTs = null;
-            this.rafId = requestAnimationFrame((t) => this._loop(t));
+            this.lastFrameTimestamp = null;
+            this.rafId = requestAnimationFrame((t) => this._timerLoop(t));
         }
 
         pause() {
@@ -517,7 +537,8 @@
         // slides/pours across to the opposite end of that same bulb
         // (the bit that hadn't drained yet settles onto the rim; the
         // bit that had piled up slides off toward the neck). That pour
-        // is what actually gets animated, per bulb, in _pourTransfer.
+        // is what actually gets animated, per bulb, in _startPourTransfer.
+        //
         // Sequenced in two phases so each part reads clearly on its own:
         // (1) the shell spins — sand stays exactly as it was, like a
         // quick rigid flip too fast for anything to shift; (2) once it's
@@ -532,11 +553,11 @@
             const oldParity = this.parity;
             const oldDrainKey = oldParity === 0 ? 'top' : 'bottom';
             const oldFillKey = oldParity === 0 ? 'bottom' : 'top';
-            const oldDrainFrontFrac = 1 - FILL_CAP * (1 - oldTimeFrac);
-            const oldFillFrontFrac = FILL_CAP * oldTimeFrac;
+            const oldDrainFrontFrac = 1 - MAX_FILL_FRACTION * (1 - oldTimeFrac);
+            const oldFillFrontFrac = MAX_FILL_FRACTION * oldTimeFrac;
 
-            this.flipDeg += 180;
-            this.wrap.parentElement.style.transform = `rotate(${this.flipDeg}deg)`;
+            this.flipRotationDeg += 180;
+            this.wrap.parentElement.style.transform = `rotate(${this.flipRotationDeg}deg)`;
             this.pause();
 
             this._flipTimeoutId = setTimeout(() => {
@@ -552,21 +573,26 @@
                 this._cancelPourTransfers();
                 if (this.resetOnFlip) {
                     this._pourActive = true;
-                    setTimeout(() => { this._pourActive = false; }, FLIP_MS);
-                    this._snapshotSandForCrossfade(FLIP_MS);
+                    setTimeout(() => { this._pourActive = false; }, SPIN_DURATION_MS);
+                    this._snapshotSandForCrossfade(SPIN_DURATION_MS);
                 } else {
                     this._startPourTransfer(oldDrainKey, 'drain', oldDrainFrontFrac);
                     this._startPourTransfer(oldFillKey, 'fill', oldFillFrontFrac);
                 }
 
                 this.start();
-            }, POUR_START_MS);
+            }, POUR_START_DELAY_MS);
         }
 
+        // Fallback for "reset sand on flip" mode: no physical pour to
+        // animate (the sand just snaps back to full/empty), so instead we
+        // cross-fade the old look out while the new one is already live
+        // underneath. Simpler than a real pour, and appropriate for a mode
+        // that's explicitly a shortcut rather than a physical simulation.
         _snapshotSandForCrossfade(durationMs) {
-            const clones = [this.sandTopPath, this.sandTopShade, this.sandBottomPath, this.sandBottomShade]
+            const snapshots = [this.sandTopPath, this.sandTopShade, this.sandBottomPath, this.sandBottomShade]
                 .map((node) => node.cloneNode(true));
-            clones.forEach((node) => {
+            snapshots.forEach((node) => {
                 node.style.transition = `opacity ${durationMs}ms ease`;
                 node.style.opacity = '1';
                 // insert above the live sand but below the neck stroke/stream
@@ -574,17 +600,19 @@
             });
             // force layout so the browser registers opacity:1 before we
             // transition to 0 — otherwise the change gets coalesced away
-            void clones[0].getBoundingClientRect();
+            void snapshots[0].getBoundingClientRect();
             requestAnimationFrame(() => {
-                clones.forEach((node) => { node.style.opacity = '0'; });
+                snapshots.forEach((node) => { node.style.opacity = '0'; });
             });
             setTimeout(() => {
-                clones.forEach((node) => node.remove());
+                snapshots.forEach((node) => node.remove());
             }, durationMs + 60);
         }
 
-        _bulbPaths(key) {
-            return key === 'top'
+        // The persistent (never removed) sand path + shade pair for a given
+        // bulb — as opposed to the transient slabPath created per pour.
+        _livePathsForBulb(bulbKey) {
+            return bulbKey === 'top'
                 ? { path: this.sandTopPath, shade: this.sandTopShade }
                 : { path: this.sandBottomPath, shade: this.sandBottomShade };
         }
@@ -595,9 +623,10 @@
         // rest at the OPPOSITE extreme. Because both ends of the slab
         // move by the same lerp, its width never changes — one
         // continuous connected mass the whole time, no gap opening up
-        // in the middle (which is what made the previous shrink+grow
+        // in the middle (which is what made an earlier shrink+grow
         // version, with two independently-sized regions, look like sand
         // vanishing from one spot and reappearing from nowhere in another).
+        //
         // Same constant "gravity" throughout — duration scales with sqrt of
         // the DISTANCE the slab's centre has to travel, not with how much
         // sand there is. A slab that already fills most of the bulb barely
@@ -609,41 +638,41 @@
             const newRole = oldRole === 'drain' ? 'fill' : 'drain';
             const transferAmount = clamp(oldRole === 'drain' ? 1 - oldFrontFrac : oldFrontFrac, 0, 1);
             const travelDistance = clamp(1 - transferAmount, 0, 1);
-            const duration = TRANSFER_MIN_MS
+            const durationMs = TRANSFER_MIN_MS
                 + (TRANSFER_MAX_MS - TRANSFER_MIN_MS) * Math.sqrt(travelDistance);
 
-            const oldLo = oldRole === 'drain' ? oldFrontFrac : 0;
-            const oldHi = oldRole === 'drain' ? 1 : oldFrontFrac;
-            const newLo = newRole === 'drain' ? 1 - transferAmount : 0;
-            const newHi = newRole === 'drain' ? 1 : transferAmount;
+            const oldLoFrac = oldRole === 'drain' ? oldFrontFrac : 0;
+            const oldHiFrac = oldRole === 'drain' ? 1 : oldFrontFrac;
+            const newLoFrac = newRole === 'drain' ? 1 - transferAmount : 0;
+            const newHiFrac = newRole === 'drain' ? 1 : transferAmount;
 
-            const live = this._bulbPaths(bulbKey);
-            live.path.style.opacity = '0';
-            live.shade.style.opacity = '0';
+            const livePaths = this._livePathsForBulb(bulbKey);
+            livePaths.path.style.opacity = '0';
+            livePaths.shade.style.opacity = '0';
 
-            const slabPath = el('path', { fill: 'url(#sandGradient)' });
+            const slabPath = createSvgElement('path', { fill: 'url(#sandGradient)' });
             this.svg.insertBefore(slabPath, this.streamLine);
 
-            const startTs = performance.now();
+            const startTimestamp = performance.now();
             const transfer = {
-                bulbKey, live, slabPath,
+                bulbKey, livePaths, slabPath,
                 tick: (now) => {
-                    const t = clamp((now - startTs) / duration, 0, 1);
+                    const t = clamp((now - startTimestamp) / durationMs, 0, 1);
                     const p = smoothstep(t); // eases in and out — no abrupt snap at either end
-                    const lo = lerp(oldLo, newLo, p);
-                    const hi = lerp(oldHi, newHi, p);
+                    const lo = lerp(oldLoFrac, newLoFrac, p);
+                    const hi = lerp(oldHiFrac, newHiFrac, p);
                     slabPath.setAttribute('d', this._bulbSlabD(bulb, lo, hi));
                     return t >= 1;
                 },
                 finish: () => {
                     slabPath.remove();
-                    live.path.style.opacity = '';
-                    live.shade.style.opacity = '';
+                    livePaths.path.style.opacity = '';
+                    livePaths.shade.style.opacity = '';
                 },
             };
             this._pourActive = true;
             this._pourTransfers.push(transfer);
-            this._ensurePourLoop();
+            this._ensurePourLoopRunning();
         }
 
         // Renders the sand between two frontFrac bounds (0=rim,1=neck)
@@ -651,26 +680,30 @@
         // transfer slab, which doesn't need the dip/peak surface bump
         // that the live drain/fill rendering has.
         _bulbSlabD(bulb, loFrontFrac, hiFrontFrac) {
-            const yA = this._frontY(bulb, clamp(loFrontFrac, 0, 1));
-            const yB = this._frontY(bulb, clamp(hiFrontFrac, 0, 1));
-            const yTop = Math.min(yA, yB);
-            const yBottom = Math.max(yA, yB);
-            const pts = bulb.points.filter((p) => p.y >= yTop && p.y <= yBottom);
-            if (pts.length < 2) return '';
-            const leftPts = pts.map((p) => ({ x: 2 * CX - p.x, y: p.y })).reverse();
-            return `M ${fmt(pts[0].x)} ${fmt(pts[0].y)} `
-                + pointsToLineSegs(pts.slice(1)) + ' '
-                + pointsToLineSegs(leftPts) + ' Z';
+            const yAtLo = this._frontY(bulb, clamp(loFrontFrac, 0, 1));
+            const yAtHi = this._frontY(bulb, clamp(hiFrontFrac, 0, 1));
+            const yTop = Math.min(yAtLo, yAtHi);
+            const yBottom = Math.max(yAtLo, yAtHi);
+            const rightPoints = bulb.points.filter((p) => p.y >= yTop && p.y <= yBottom);
+            if (rightPoints.length < 2) return '';
+            const leftPoints = rightPoints.map((p) => ({ x: 2 * CENTER_X - p.x, y: p.y })).reverse();
+            return `M ${roundCoord(rightPoints[0].x)} ${roundCoord(rightPoints[0].y)} `
+                + pointsToLineSegments(rightPoints.slice(1)) + ' '
+                + pointsToLineSegments(leftPoints) + ' Z';
         }
 
-        _ensurePourLoop() {
+        // A single shared rAF loop drives every active pour transfer (there
+        // are normally two at once, one per bulb, each with its own
+        // duration) so we don't spin up a separate requestAnimationFrame
+        // per transfer.
+        _ensurePourLoopRunning() {
             if (this._pourRafId) return;
             const step = (now) => {
                 for (let i = this._pourTransfers.length - 1; i >= 0; i--) {
-                    const tr = this._pourTransfers[i];
-                    const done = tr.tick(now);
-                    if (done) {
-                        tr.finish();
+                    const transfer = this._pourTransfers[i];
+                    const finished = transfer.tick(now);
+                    if (finished) {
+                        transfer.finish();
                         this._pourTransfers.splice(i, 1);
                     }
                 }
@@ -688,20 +721,20 @@
             if (this._pourRafId) cancelAnimationFrame(this._pourRafId);
             this._pourRafId = null;
             this._pourActive = false;
-            this._pourTransfers.splice(0).forEach((tr) => tr.finish());
+            this._pourTransfers.splice(0).forEach((transfer) => transfer.finish());
         }
 
         _clearParticles() {
             this.particles.length = 0;
-            this._spawnAccum = 0;
+            this._spawnAccumMs = 0;
             this._stepParticles(0);
         }
 
-        _loop(ts) {
+        _timerLoop(timestamp) {
             if (!this.running) return;
-            if (this.lastTs == null) this.lastTs = ts;
-            const dt = ts - this.lastTs;
-            this.lastTs = ts;
+            if (this.lastFrameTimestamp == null) this.lastFrameTimestamp = timestamp;
+            const dt = timestamp - this.lastFrameTimestamp;
+            this.lastFrameTimestamp = timestamp;
 
             this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt);
             const timeFrac = this.elapsedMs / this.durationMs;
@@ -718,7 +751,7 @@
                 if (this.onDone) this.onDone();
                 return;
             }
-            this.rafId = requestAnimationFrame((t) => this._loop(t));
+            this.rafId = requestAnimationFrame((t) => this._timerLoop(t));
         }
 
         _notifyTick() {
