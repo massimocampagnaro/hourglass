@@ -12,18 +12,28 @@
     const startPauseBtn = document.getElementById('startPauseBtn');
     const resetBtn = document.getElementById('resetBtn');
     const timeReadout = document.getElementById('timeReadout');
-    const resetOnFlipToggle = document.getElementById('resetOnFlipToggle');
+    const physicalFlipToggle = document.getElementById('physicalFlipToggle');
 
-    // "Reset sand on flip" is a personal, ongoing preference (not something
-    // you'd want to share via a link), so it lives in localStorage rather
-    // than the URL — set once, remembered silently across reloads.
+    // Whether to reset on flip is a personal, ongoing preference (not
+    // something you'd want to share via a link), so it lives in
+    // localStorage rather than the URL — set once, remembered silently
+    // across reloads.
+    //
+    // Default is reset-on-flip: for a Pomodoro-style timer, "flip = start
+    // the next session fresh" is the expected behavior (like turning over
+    // a kitchen timer). The toggle is the opt-in exception — flip the
+    // hourglass but let the sand actually pour across for real, mirroring
+    // however much time was left — so it reads naturally unchecked
+    // (= default) / checked (= this fancier opt-in mode), rather than
+    // shipping a checkbox that's already ticked the first time you see it.
     const RESET_ON_FLIP_STORAGE_KEY = 'hourglass:resetOnFlip';
 
     function loadResetOnFlipPreference() {
         try {
-            return localStorage.getItem(RESET_ON_FLIP_STORAGE_KEY) === '1';
+            const stored = localStorage.getItem(RESET_ON_FLIP_STORAGE_KEY);
+            return stored === null ? true : stored === '1';
         } catch {
-            return false; // storage unavailable (private browsing, quota, etc.)
+            return true; // storage unavailable (private browsing, quota, etc.)
         }
     }
 
@@ -36,8 +46,9 @@
     }
 
     const glass = new Hourglass(wrap);
-    resetOnFlipToggle.checked = loadResetOnFlipPreference();
-    glass.resetOnFlip = resetOnFlipToggle.checked;
+    const resetOnFlip = loadResetOnFlipPreference();
+    physicalFlipToggle.checked = !resetOnFlip;
+    glass.resetOnFlip = resetOnFlip;
 
     function formatTime(ms) {
         const totalSec = Math.ceil(ms / 1000);
@@ -111,9 +122,10 @@
         syncUrl(true); // flip always ends up running, even though glass.running lags behind
     });
 
-    resetOnFlipToggle.addEventListener('change', () => {
-        glass.resetOnFlip = resetOnFlipToggle.checked;
-        saveResetOnFlipPreference(resetOnFlipToggle.checked);
+    physicalFlipToggle.addEventListener('change', () => {
+        const nextResetOnFlip = !physicalFlipToggle.checked;
+        glass.resetOnFlip = nextResetOnFlip;
+        saveResetOnFlipPreference(nextResetOnFlip);
     });
 
     durationInput.addEventListener('change', () => {
