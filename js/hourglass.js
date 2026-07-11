@@ -39,6 +39,17 @@
 
     const DRAIN_DIP_MAX = 9;   // max crater depth on a draining surface
     const FILL_PEAK_MAX = 15;  // max mound height on a filling surface
+
+    // Grain physics integrates velocity/position step by step, so it falls
+    // apart with a huge dt — e.g. after the tab was backgrounded, browsers
+    // throttle or fully pause requestAnimationFrame, and the first frame
+    // back can report a multi-second gap. Fed straight into the physics,
+    // that reads as grains rocketing far past where they should land in a
+    // single step (seen as big, sparse, slow-looking "discs" once things
+    // catch up). The sand LEVEL itself is unaffected since it's computed
+    // straight from absolute elapsed time, not integrated incrementally —
+    // only this per-frame particle step needs a sanity cap.
+    const MAX_PARTICLE_FRAME_MS = 50;
     const MAX_FILL_FRACTION = 0.86; // sand never fills more than this fraction of a
                                      // bulb's geometric volume, so it never appears
                                      // to touch the rim (top) or crowd the neck (bottom)
@@ -739,7 +750,7 @@
             this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt);
             const timeFrac = this.elapsedMs / this.durationMs;
             this._updateSand(timeFrac);
-            this._stepParticles(dt);
+            this._stepParticles(Math.min(dt, MAX_PARTICLE_FRAME_MS));
             this._notifyTick();
 
             // once time's up, keep animating (no new grains spawn — the
