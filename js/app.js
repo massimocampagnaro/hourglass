@@ -50,13 +50,6 @@
     physicalFlipToggle.checked = !resetOnFlip;
     glass.resetOnFlip = resetOnFlip;
 
-    function formatTime(ms) {
-        const totalSec = Math.ceil(ms / 1000);
-        const m = Math.floor(totalSec / 60);
-        const s = totalSec % 60;
-        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    }
-
     function syncPresetButtons(minutes) {
         presetRow.querySelectorAll('.preset-btn').forEach((btn) => {
             btn.classList.toggle('is-active', Number(btn.dataset.minutes) === minutes);
@@ -64,7 +57,7 @@
     }
 
     function setMinutes(minutes) {
-        minutes = Math.max(1, Math.min(180, Math.round(minutes)));
+        minutes = HourglassShared.clampMinutes(minutes);
         durationInput.value = minutes;
         syncPresetButtons(minutes);
         glass.setDuration(minutes);
@@ -88,7 +81,7 @@
     }
 
     glass.onTick = (remainingMs) => {
-        timeReadout.textContent = formatTime(remainingMs);
+        timeReadout.textContent = HourglassShared.formatTime(remainingMs);
     };
 
     glass.onDone = () => {
@@ -165,13 +158,12 @@
     // Optional query params so a timer can be shared/bookmarked pre-configured,
     // e.g. link.html?minutes=25&autostart=1 for a one-tap Pomodoro start.
     // Both are independent and optional — omitting either just falls back
-    // to the normal default (5 min, not running).
-    const urlParams = new URLSearchParams(window.location.search);
-    const minutesParam = parseInt(urlParams.get('minutes'), 10);
-    setMinutes(Number.isFinite(minutesParam) ? minutesParam : 5);
+    // to the normal default (5 min, not running). Shared with embed/embed.js
+    // so the two entry points read the same contract.
+    const { minutes: initialMinutes, autostart } = HourglassShared.readTimerParams(window.location.search);
+    setMinutes(initialMinutes);
 
-    const autostartParam = urlParams.get('autostart');
-    if (autostartParam === '1' || autostartParam === 'true') {
+    if (autostart) {
         glass.start();
         startPauseBtn.textContent = 'Pause';
     }

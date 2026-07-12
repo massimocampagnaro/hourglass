@@ -1,0 +1,28 @@
+/* ============================================================
+   css/embed.css — layout overrides for the embeddable widget
+   Loaded after css/style.css on embed/index.html — design tokens
+   and component classes (.stage, .hourglass-shell, .time-readout,
+   the --text-2xl clamp() that already makes the readout responsive
+   to the iframe's own viewport) are reused as-is. This file only
+   swaps the full-page layout for one sized to fill an iframe with
+   a transparent background.
+   ============================================================ */
+
+body.embed-body {
+    min-height: 0;
+    height: 100vh;
+    background: transparent;
+    padding: var(--sp-2);
+    justify-content: center;
+}
+
+.embed-body .stage {
+    gap: var(--sp-2);
+}
+
+.embed-body .hourglass-shell {
+    /* bounded by both vw and vh — with the vh bound kept conservative —
+       so a short-but-wide iframe (or a narrow-but-tall one) still leaves
+       room for the gap/padding/time text below without clipping */
+    width: min(60vw, 40vh, 280px);
+}
