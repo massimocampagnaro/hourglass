@@ -1,12 +1,15 @@
 /* ============================================================
-   css/embed.css — layout overrides for the embeddable widget
-   Loaded after css/style.css on embed/index.html — design tokens
-   and component classes (.stage, .hourglass-shell, .time-readout,
-   the --text-2xl clamp() that already makes the readout responsive
-   to the iframe's own viewport) are reused as-is. This file only
-   swaps the full-page layout for one sized to fill an iframe with
-   a transparent background.
+   css/embed.css — layout overrides for the embeddable widget.
+   Loaded after css/style.css — same tokens/classes, just a
+   transparent, iframe-sized layout instead of a full page.
    ============================================================ */
+
+/* Rotating the shell during the flip can overflow the page (transforms
+   count toward scrollable overflow); this clips it instead of showing
+   a scrollbar. Needed on both html and body. */
+html, body.embed-body {
+    overflow: hidden;
+}
 
 body.embed-body {
     min-height: 0;
@@ -21,8 +24,7 @@ body.embed-body {
 }
 
 .embed-body .hourglass-shell {
-    /* bounded by both vw and vh — with the vh bound kept conservative —
-       so a short-but-wide iframe (or a narrow-but-tall one) still leaves
-       room for the gap/padding/time text below without clipping */
-    width: min(60vw, 40vh, 280px);
+    /* 40vh * 1.75 (glass aspect ratio) = 70% max, always leaving room
+       below it for padding/gap/time text. */
+    width: min(60vw, 40vh, 200px);
 }
