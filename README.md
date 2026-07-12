@@ -22,12 +22,13 @@ Drop just the hourglass and the time readout into another page as a transparent,
 
 `9/11` renders the widget at (close to) its full size; just set a width (or a height) and `aspect-ratio` derives the other one.
 
-Query params (both optional):
+Query params (all optional):
 
-- `minutes` — starting duration in minutes, 1–180 (default 5)
-- `autostart` — `1` or `true` to start counting down immediately (default off)
+- `minutes`: starting duration in minutes, 1–180 (default 5)
+- `autostart`: `1` or `true` to start counting down immediately (default off)
+- `theme`: `light` for embedding on a light page (darkens the time text; the hourglass itself is unchanged). Default is the dark theme above.
 
-More params (colors, etc.) may be added later; unset ones just fall back to their defaults, so existing embed links keep working.
+More params (more colors, etc.) may be added later; unset ones just fall back to their defaults, so existing embed links keep working.
 
 ## How it works
 

@@ -27,4 +27,15 @@ body.embed-body {
     /* 40vh * 1.75 (glass aspect ratio) = 70% max, always leaving room
        below it for padding/gap/time text. */
     width: min(60vw, 40vh, 200px);
+    filter: none;
+}
+
+/* ?theme=light — for embedding on a light host page. Only the time text's
+   color flips; the hourglass itself is unchanged either way. */
+.embed-body[data-theme="light"] .time-readout {
+    color: var(--color-bg);
+}
+
+.embed-body[data-theme="light"] .time-readout.is-done {
+    color: var(--color-sand-dark);
 }
