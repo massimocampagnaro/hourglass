@@ -8,9 +8,14 @@ Preview: https://massimocampagnaro.github.io/hourglass
 
 Drop just the hourglass and the time readout into another page as a transparent, borderless widget without header, footer or buttons:
 
+<p align="center">
+    <img height="300" alt="hourglass" src="https://github.com/user-attachments/assets/dac5d41f-6c5d-419b-aacd-16a25fec3ff8" />
+</p>
+
+
 ```html
 <iframe
-    src="https://massimocampagnaro.github.io/hourglass/embed/?minutes=25&autostart=1"
+    src="https://massimocampagnaro.github.io/hourglass/embed/?minutes=5&autostart=1"
     style="width: 100%; max-width: 280px; aspect-ratio: 9/11; border: none;">
 </iframe>
 ```
