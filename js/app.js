@@ -11,6 +11,7 @@
     const presetRow = document.getElementById('presetRow');
     const startPauseBtn = document.getElementById('startPauseBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const popOutBtn = document.getElementById('popOutBtn');
     const muteBtn = document.getElementById('muteBtn');
     const timeReadout = document.getElementById('timeReadout');
     const physicalFlipToggle = document.getElementById('physicalFlipToggle');
@@ -143,6 +144,21 @@
         timeReadout.classList.remove('is-done');
         syncUrl();
     });
+
+    // Open popup in a new tab with fixed position and dimensions
+    popOutBtn.addEventListener('click', () => {
+        const width = 380;
+        const height = Math.min(1080, window.screen.availHeight);
+        const left = Math.max(0, window.screen.availWidth - width);
+        const popupUrl = new URL(window.location.href);
+        popupUrl.searchParams.set('popout', '0');
+        window.open(popupUrl, 'hourglassPopout', `width=${width},height=${height},left=${left},top=0`);
+    });
+
+    if (new URLSearchParams(window.location.search).get('popout') === '0') {
+        popOutBtn.hidden = true;
+        document.documentElement.classList.add('is-popout'); // sized to fit exactly, no scrollbar needed
+    }
 
     shell.addEventListener('click', () => {
         timeReadout.classList.remove('is-done');

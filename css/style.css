@@ -61,6 +61,15 @@
     }
 }
 
+html.is-popout,
+html.is-popout body {
+    overflow: hidden;
+}
+
+html.is-popout .site-footer {
+    display: none;
+}
+
 body {
     min-height: 100vh;
     font-family: var(--font), sans-serif;
@@ -217,8 +226,23 @@ body {
     border-color: var(--color-sand);
 }
 
+#popOutBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#popOutBtn[hidden] {
+    display: none;
+}
+
+#popOutBtn svg {
+    display: block;
+}
+
 .button-row {
     display: flex;
+    align-items: center;
     gap: var(--sp-3);
 }
 
@@ -284,6 +308,12 @@ body {
 
 .corner-link--right {
     right: var(--sp-4);
+}
+
+#muteBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #muteBtn[aria-pressed="true"] {
