@@ -11,6 +11,7 @@
     const presetRow = document.getElementById('presetRow');
     const startPauseBtn = document.getElementById('startPauseBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const muteBtn = document.getElementById('muteBtn');
     const timeReadout = document.getElementById('timeReadout');
     const physicalFlipToggle = document.getElementById('physicalFlipToggle');
 
@@ -45,10 +46,44 @@
         }
     }
 
+    // Same rationale as RESET_ON_FLIP_STORAGE_KEY: personal preference, not shareable via URL.
+    const MUTED_STORAGE_KEY = 'hourglass:muted';
+
+    function loadMutedPreference() {
+        try {
+            return localStorage.getItem(MUTED_STORAGE_KEY) === '1';
+        } catch {
+            return false; // storage unavailable (private browsing, quota, etc.)
+        }
+    }
+
+    function saveMutedPreference(muted) {
+        try {
+            localStorage.setItem(MUTED_STORAGE_KEY, muted ? '1' : '0');
+        } catch {
+            // ignore — nothing useful to do if storage is unavailable
+        }
+    }
+
     const glass = new Hourglass(wrap);
     const resetOnFlip = loadResetOnFlipPreference();
     physicalFlipToggle.checked = !resetOnFlip;
     glass.resetOnFlip = resetOnFlip;
+
+    let muted = loadMutedPreference();
+
+    function syncMuteButton() {
+        muteBtn.textContent = muted ? '\u{1F507}' : '\u{1F50A}';
+        muteBtn.setAttribute('aria-pressed', String(muted));
+        muteBtn.setAttribute('aria-label', muted ? 'Unmute done sound' : 'Mute done sound');
+    }
+    syncMuteButton();
+
+    muteBtn.addEventListener('click', () => {
+        muted = !muted;
+        saveMutedPreference(muted);
+        syncMuteButton();
+    });
 
     function syncPresetButtons(minutes) {
         presetRow.querySelectorAll('.preset-btn').forEach((btn) => {
@@ -87,6 +122,7 @@
     glass.onDone = () => {
         startPauseBtn.textContent = 'Start';
         timeReadout.classList.add('is-done');
+        if (!muted) HourglassShared.playDoneSound();
     };
 
     startPauseBtn.addEventListener('click', () => {

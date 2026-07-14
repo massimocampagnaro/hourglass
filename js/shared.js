@@ -27,5 +27,16 @@
         return { minutes, autostart };
     }
 
-    window.HourglassShared = { formatTime, clampMinutes, readTimerParams };
+    // Resolved relative to this script's own file, not the page — index.html
+    // and embed/index.html live in different folders.
+    const DONE_SOUND_URL = new URL('../sounds/done.mp3', document.currentScript.src);
+    let doneSound = null;
+
+    function playDoneSound() {
+        if (!doneSound) doneSound = new Audio(DONE_SOUND_URL);
+        doneSound.currentTime = 0;
+        doneSound.play().catch(() => {}); // blocked without a prior user gesture
+    }
+
+    window.HourglassShared = { formatTime, clampMinutes, readTimerParams, playDoneSound };
 })();

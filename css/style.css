@@ -251,6 +251,18 @@ body {
     border-color: var(--color-sand-light);
 }
 
+.btn-icon {
+    flex-shrink: 0;
+    padding: 0.6rem 0.8rem;
+    font-size: var(--text-base);
+    line-height: 1;
+}
+
+.btn-icon[aria-pressed="true"] {
+    color: var(--color-text-muted);
+    opacity: 0.6;
+}
+
 .hint {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
