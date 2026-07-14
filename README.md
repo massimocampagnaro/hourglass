@@ -43,3 +43,7 @@ Built with vanilla HTML, CSS, and JavaScript — no frameworks, no dependencies.
 - [x] **Phase 1:** a single, configurable hourglass. 
 - [ ] **Phase 2:** multiple hourglasses side by side with presets (5 / 25 / 30 min + custom) for the Pomodoro method.
 - [ ] **Phase 3:** automatic mode (sound + auto-start of the next timer, alternating focus/break) vs. manual mode.
+
+## License
+
+[MIT](LICENSE) © 2026 Massimo Campagnaro
