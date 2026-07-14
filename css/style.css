@@ -5,6 +5,8 @@
    ============================================================ */
 
 :root {
+    color-scheme: dark; /* themes native UI too, e.g. the scrollbar */
+
     /* Colors */
     --color-bg: #0d1117;
     --color-bg-raised: #161b22;
@@ -21,12 +23,12 @@
     --color-glass: rgba(196, 220, 235, 0.5);
     --color-glass-dim: rgba(196, 220, 235, 0.16);
 
-    /* Typography */
+    /* Fixed sizes, not vw-scaled — text shouldn't shrink as the window narrows. */
     --font: 'Poppins', system-ui, -apple-system, sans-serif;
-    --text-sm: clamp(0.80rem, 1.5vw, 0.90rem);
-    --text-base: clamp(0.9rem, 2vw, 1rem);
-    --text-lg: clamp(1.1rem, 2.5vw, 1.3rem);
-    --text-2xl: clamp(1.6rem, 4vw, 2.2rem);
+    --text-sm: 0.90rem;
+    --text-base: 1rem;
+    --text-lg: 1.3rem;
+    --text-2xl: 2.2rem;
 
     /* Spacing */
     --sp-2: 0.5rem;
@@ -73,6 +75,7 @@ body {
 /* ─── HEADER ─────────────────────────────────────────────── */
 .site-header {
     text-align: center;
+    padding-top: var(--sp-6); /* clears the fixed corner-link pills above it */
     margin-bottom: var(--sp-8);
 }
 
@@ -99,7 +102,7 @@ body {
 
 .hourglass-shell {
     position: relative;
-    width: min(78vw, 300px);
+    width: min(300px, calc(100vw - 2 * var(--sp-4))); /* full size until it'd overflow */
     cursor: pointer;
     filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
     transition: transform var(--t-flip);
