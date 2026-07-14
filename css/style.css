@@ -251,16 +251,40 @@ body {
     border-color: var(--color-sand-light);
 }
 
-.btn-icon {
-    flex-shrink: 0;
-    padding: 0.6rem 0.8rem;
-    font-size: var(--text-base);
+/* ─── CORNER LINKS (portfolio / mute) ────────────────────── */
+.corner-link {
+    position: fixed;
+    top: var(--sp-4);
+    z-index: 10;
+    font-family: var(--font), sans-serif;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    padding: 0.4rem 0.9rem;
     line-height: 1;
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast);
 }
 
-.btn-icon[aria-pressed="true"] {
-    color: var(--color-text-muted);
-    opacity: 0.6;
+.corner-link:hover {
+    border-color: var(--color-accent-dim);
+    color: var(--color-text);
+}
+
+.corner-link--left {
+    left: var(--sp-4);
+}
+
+.corner-link--right {
+    right: var(--sp-4);
+}
+
+#muteBtn[aria-pressed="true"] {
+    opacity: 0.55;
 }
 
 .hint {
@@ -332,4 +356,19 @@ body {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
     opacity: 0.6;
+    text-align: center;
+}
+
+.site-footer p + p {
+    margin-top: var(--sp-2);
+}
+
+.site-footer a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.site-footer a:hover {
+    color: var(--color-text);
 }
