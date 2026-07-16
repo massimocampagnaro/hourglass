@@ -26,37 +26,25 @@
 
 <main>
     <div class="stage">
-        <div class="hourglass-shell" id="hourglassShell">
-            <div class="hourglass-canvas-wrap" id="hourglassWrap">
-                <!-- SVG glass + sand injected here by hourglass.js -->
-                <canvas id="grainCanvas" class="grain-canvas"></canvas>
-            </div>
+        <div class="global-toolbar">
+            <button type="button" class="btn" id="pomodoroBtn">Pomodoro</button>
+            <label class="toggle-row">
+                <input type="checkbox" id="autoModeToggle">
+                <span class="toggle-switch"></span>
+                <span>Automatic mode</span>
+            </label>
         </div>
 
-        <div class="time-readout" id="timeReadout">05:00</div>
+        <div class="hourglass-row" id="hourglassRow">
+            <!-- hourglass cards (and the trailing "+" card) injected here by js/cards.js -->
+        </div>
 
         <div class="controls">
-            <div class="duration-control">
-                <label for="durationInput">Minutes</label>
-                <input type="number" id="durationInput" min="1" max="180" step="1" value="5" inputmode="numeric">
-            </div>
-
-            <div class="preset-row" id="presetRow">
-                <button type="button" class="preset-btn" data-minutes="5">5</button>
-                <button type="button" class="preset-btn" data-minutes="25">25</button>
-                <button type="button" class="preset-btn" data-minutes="30">30</button>
-                <button type="button" class="preset-btn" data-minutes="60">60</button>
-            </div>
-
-            <div class="button-row">
-                <button type="button" class="btn btn-primary" id="startPauseBtn">Start</button>
-                <button type="button" class="btn" id="resetBtn">Reset</button>
-                <button type="button" class="preset-btn" id="popOutBtn" aria-label="Open in a resizable popup window" title="Open in a resizable popup window">
-                    <svg width="24" height="24" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" focusable="false">
-                        <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h280v80H200v560h560v-280h80v280q0 33-23.5 56.5T760-120H200Zm188-212-56-56 372-372H560v-80h280v280h-80v-144L388-332Z"/>
-                    </svg>
-                </button>
-            </div>
+            <button type="button" class="preset-btn" id="popOutBtn" aria-label="Open in a resizable popup window" title="Open in a resizable popup window">
+                <svg width="24" height="24" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" focusable="false">
+                    <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h280v80H200v560h560v-280h80v280q0 33-23.5 56.5T760-120H200Zm188-212-56-56 372-372H560v-80h280v280h-80v-144L388-332Z"/>
+                </svg>
+            </button>
 
             <label class="toggle-row">
                 <input type="checkbox" id="physicalFlipToggle">
@@ -64,8 +52,8 @@
                 <span>Keep sand on flip</span>
             </label>
 
-            <p class="hint">Click the hourglass to flip it over</p>
-            <p class="hint">Space to start/pause &middot; R to reset &middot; F to flip</p>
+            <p class="hint">Click a hourglass to flip it over &middot; edit (pencil) to reconfigure</p>
+            <p class="hint">Space to start/pause &middot; R to reset &middot; F to flip the focused hourglass</p>
         </div>
     </div>
 </main>
@@ -77,6 +65,7 @@
 
 <script src="js/hourglass.js"></script>
 <script src="js/shared.js"></script>
+<script src="js/cards.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

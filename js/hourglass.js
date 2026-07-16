@@ -145,10 +145,19 @@
         return element;
     }
 
+    // url(#id) references resolve against the whole document's id space, not
+    // scoped per <svg> — so with several Hourglass instances on one page,
+    // identical gradient/filter ids would all resolve to whichever
+    // instance's <defs> happened to render first (every other instance's
+    // sand would silently borrow the first instance's colors). Each
+    // instance gets its own uid suffix to keep its ids unique document-wide.
+    let instanceCounter = 0;
+
     // ══════════════════════════════════════════════════════════
     class Hourglass {
         constructor(wrap) {
             this.wrap = wrap;
+            this._uid = `hg${instanceCounter++}`;
             this.durationMs = 5 * 60 * 1000;
             this.elapsedMs = 0;
             this.running = false;
@@ -196,6 +205,11 @@
             this._updateSand(0);
         }
 
+        // Per-instance id (and the matching url(#..) reference) for defs
+        // shared within this instance's own <svg> — see instanceCounter above.
+        _gid(name) { return `${name}-${this._uid}`; }
+        _gref(name) { return `url(#${this._gid(name)})`; }
+
         _buildSvg() {
             const svg = createSvgElement('svg', {
                 viewBox: `0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`,
@@ -204,36 +218,36 @@
 
             const defs = createSvgElement('defs', {});
             defs.innerHTML = `
-                <linearGradient id="glassFill" x1="0" y1="0" x2="1" y2="1">
+                <linearGradient id="${this._gid('glassFill')}" x1="0" y1="0" x2="1" y2="1">
                     <stop offset="0%" stop-color="rgba(210,232,245,0.14)"/>
                     <stop offset="45%" stop-color="rgba(200,225,240,0.05)"/>
                     <stop offset="100%" stop-color="rgba(180,210,230,0.10)"/>
                 </linearGradient>
-                <linearGradient id="glassStroke" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="${this._gid('glassStroke')}" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="rgba(225,240,250,0.85)"/>
                     <stop offset="50%" stop-color="rgba(190,215,232,0.35)"/>
                     <stop offset="100%" stop-color="rgba(225,240,250,0.85)"/>
                 </linearGradient>
-                <linearGradient id="sandGradient" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="${this._gid('sandGradient')}" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="var(--color-sand-light)"/>
                     <stop offset="60%" stop-color="var(--color-sand)"/>
                     <stop offset="100%" stop-color="var(--color-sand-dark)"/>
                 </linearGradient>
-                <radialGradient id="sandPileShade" cx="50%" cy="0%" r="85%">
+                <radialGradient id="${this._gid('sandPileShade')}" cx="50%" cy="0%" r="85%">
                     <stop offset="0%" stop-color="rgba(255,240,210,0.35)"/>
                     <stop offset="100%" stop-color="rgba(120,70,20,0)"/>
                 </radialGradient>
-                <linearGradient id="streamGradient" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="${this._gid('streamGradient')}" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="var(--color-sand-light)" stop-opacity="0.95"/>
                     <stop offset="100%" stop-color="var(--color-sand-light)" stop-opacity="0.5"/>
                 </linearGradient>
-                <linearGradient id="highlightFade" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="${this._gid('highlightFade')}" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="rgba(255,255,255,0)"/>
                     <stop offset="30%" stop-color="rgba(255,255,255,0.3)"/>
                     <stop offset="70%" stop-color="rgba(255,255,255,0.3)"/>
                     <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
                 </linearGradient>
-                <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <filter id="${this._gid('softGlow')}" x="-50%" y="-50%" width="200%" height="200%">
                     <feGaussianBlur stdDeviation="3.2" result="blur"/>
                     <feMerge>
                         <feMergeNode in="blur"/>
@@ -246,8 +260,8 @@
             // glass fill + outline (built once, static — never touched again)
             const glassPath = createSvgElement('path', {
                 d: this._glassOutlineD(),
-                fill: 'url(#glassFill)',
-                stroke: 'url(#glassStroke)',
+                fill: this._gref('glassFill'),
+                stroke: this._gref('glassStroke'),
                 'stroke-width': '3',
                 'stroke-linejoin': 'round',
                 'stroke-linecap': 'round',
@@ -268,20 +282,20 @@
             // bulb curvature, inset from the wall, faded at both ends
             svg.appendChild(createSvgElement('path', {
                 d: this._highlightPathD(this.rightTopPoints, 0.72),
-                fill: 'none', stroke: 'url(#highlightFade)', 'stroke-width': 6,
+                fill: 'none', stroke: this._gref('highlightFade'), 'stroke-width': 6,
                 'stroke-linecap': 'round',
             }));
             svg.appendChild(createSvgElement('path', {
                 d: this._highlightPathD(this.rightBottomPoints, 0.72),
-                fill: 'none', stroke: 'url(#highlightFade)', 'stroke-width': 6,
+                fill: 'none', stroke: this._gref('highlightFade'), 'stroke-width': 6,
                 'stroke-linecap': 'round',
             }));
 
             // sand (dynamic — redrawn every frame by _updateSand)
-            this.sandTopPath = createSvgElement('path', { fill: 'url(#sandGradient)' });
-            this.sandTopShade = createSvgElement('path', { fill: 'url(#sandPileShade)', opacity: 0.6 });
-            this.sandBottomPath = createSvgElement('path', { fill: 'url(#sandGradient)' });
-            this.sandBottomShade = createSvgElement('path', { fill: 'url(#sandPileShade)', opacity: 0.7 });
+            this.sandTopPath = createSvgElement('path', { fill: this._gref('sandGradient') });
+            this.sandTopShade = createSvgElement('path', { fill: this._gref('sandPileShade'), opacity: 0.6 });
+            this.sandBottomPath = createSvgElement('path', { fill: this._gref('sandGradient') });
+            this.sandBottomShade = createSvgElement('path', { fill: this._gref('sandPileShade'), opacity: 0.7 });
             svg.appendChild(this.sandTopPath);
             svg.appendChild(this.sandTopShade);
             svg.appendChild(this.sandBottomPath);
@@ -289,8 +303,8 @@
 
             this.streamLine = createSvgElement('line', {
                 x1: CENTER_X, x2: CENTER_X, y1: NECK_Y - 4, y2: NECK_Y + 40,
-                stroke: 'url(#streamGradient)', 'stroke-width': 2.4,
-                'stroke-dasharray': '3 5', filter: 'url(#softGlow)',
+                stroke: this._gref('streamGradient'), 'stroke-width': 2.4,
+                'stroke-dasharray': '3 5', filter: this._gref('softGlow'),
             });
             svg.appendChild(this.streamLine);
 
@@ -299,7 +313,7 @@
             svg.appendChild(createSvgElement('path', {
                 d: this._glassOutlineD(),
                 fill: 'none',
-                stroke: 'url(#glassStroke)',
+                stroke: this._gref('glassStroke'),
                 'stroke-width': '3',
                 'stroke-linejoin': 'round',
                 'stroke-linecap': 'round',
@@ -661,7 +675,7 @@
             livePaths.path.style.opacity = '0';
             livePaths.shade.style.opacity = '0';
 
-            const slabPath = createSvgElement('path', { fill: 'url(#sandGradient)' });
+            const slabPath = createSvgElement('path', { fill: this._gref('sandGradient') });
             this.svg.insertBefore(slabPath, this.streamLine);
 
             const startTimestamp = performance.now();

@@ -61,11 +61,6 @@
     }
 }
 
-html.is-popout,
-html.is-popout body {
-    overflow: hidden;
-}
-
 html.is-popout .site-footer {
     display: none;
 }
@@ -109,6 +104,14 @@ body {
     gap: var(--sp-6);
 }
 
+.global-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--sp-4);
+}
+
 .hourglass-shell {
     position: relative;
     width: min(300px, calc(100vw - 2 * var(--sp-4))); /* full size until it'd overflow */
@@ -116,6 +119,317 @@ body {
     filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
     transition: transform var(--t-flip);
     transform-style: preserve-3d;
+}
+
+.hourglass-shell.is-flip-disabled {
+    cursor: default;
+    pointer-events: none;
+}
+
+/* ─── HOURGLASS ROW (Phase 2/3: multiple cards) ─────────── */
+/* Three-column grid: two side gutters of equal, fixed width (matching the
+   Add button's own width formula below) flanking an auto-sized middle
+   column that holds .hourglass-cards. The left gutter is never occupied
+   by any element — no "phantom" DOM node needed to balance Add's width,
+   the grid tracks alone guarantee the symmetry — so the real hourglasses
+   always land dead center regardless of how many there are, while Add
+   still reads as sitting beside them. Below 720px it collapses to a
+   single column, stacking Add under the cards instead of squeezing three
+   columns onto a narrow screen. */
+.hourglass-row {
+    display: grid;
+    grid-template-columns: min(140px, 28vw) auto min(140px, 28vw);
+    align-items: start;
+    justify-items: center;
+    gap: var(--sp-6);
+    width: 100%;
+}
+
+.hourglass-cards {
+    grid-column: 2;
+    display: flex;
+    align-items: flex-start; /* different-sized glasses still share a visual baseline */
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--sp-6);
+}
+
+/* At the 3-card cap, Add is hidden entirely (see js/cards.js refreshUI) —
+   this drops the two reserved side gutters too, so the cards get the
+   full row width to center in instead of leaving a phantom margin on
+   both sides where Add used to be. Higher specificity than the plain
+   .hourglass-row rule above, so it wins regardless of source order. */
+.hourglass-row.is-at-max {
+    grid-template-columns: 1fr;
+}
+
+.hourglass-row.is-at-max .hourglass-cards {
+    grid-column: 1;
+}
+
+.hourglass-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+/* One row's cards share --hg-count (set on the row) and each card's own
+   --hg-base-px/--hg-scale (set per card from its duration) — see js/cards.js
+   updateRowLayout(). Falls back to the original fixed 300px/1x when unset,
+   so nothing here affects the embed widget, which never sets these vars. */
+.hourglass-card .hourglass-shell {
+    width: min(
+        calc(var(--hg-base-px, 300px) * var(--hg-scale, 1)),
+        calc((100vw - 2 * var(--sp-4) - (var(--hg-count, 1) - 1) * var(--sp-6)) / var(--hg-count, 1))
+    );
+}
+
+.hourglass-card.is-sequence-active .hourglass-shell {
+    animation: sequence-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes sequence-pulse {
+    0%, 100% { filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55)); }
+    50% { filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 14px var(--color-sand)); }
+}
+
+.card-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    letter-spacing: 0.02em;
+    min-height: 1.2em;
+}
+
+.hourglass-card--add {
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    width: min(140px, 28vw);
+    aspect-ratio: 320 / 560;
+    margin-top: var(--sp-6);
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast);
+}
+
+.hourglass-card--add:hover {
+    border-color: var(--color-accent-dim);
+    color: var(--color-text);
+}
+
+.hourglass-card--add.is-disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* [hidden] needs the extra attribute-selector specificity to beat the
+   plain-class display:flex rule above — same reasoning as the toolbar/
+   config-panel [hidden] rule further down. */
+.hourglass-card--add[hidden] {
+    display: none;
+}
+
+.hourglass-card--add .add-label {
+    font-size: var(--text-sm);
+}
+
+/* Collapses the 3-column grid to one on narrow screens: Add wraps below
+   the cards instead of squeezing three columns into too little width.
+   Must come after the unconditional grid-column:2/3 rules above — same
+   specificity, so source order (not the media query) decides the winner
+   when both apply. */
+@media (max-width: 719px) {
+    .hourglass-row {
+        grid-template-columns: 1fr;
+    }
+
+    .hourglass-cards,
+    .hourglass-card--add {
+        grid-column: 1;
+    }
+
+    .hourglass-card--add {
+        margin-top: 0;
+    }
+}
+
+/* ─── CARD TOOLBAR (locked card: play/pause, reset, edit, remove) ── */
+.card-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    color: var(--color-text-muted);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast), opacity var(--t-fast);
+}
+
+.icon-btn:hover:not(:disabled) {
+    color: var(--color-text);
+    border-color: var(--color-accent-dim);
+}
+
+.icon-btn:active:not(:disabled) {
+    transform: scale(0.94);
+}
+
+.icon-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.icon-btn--danger:hover:not(:disabled) {
+    color: #e0605a;
+    border-color: rgba(224, 96, 90, 0.5);
+}
+
+.icon-btn[data-action="toggle"] {
+    background: var(--color-sand);
+    border-color: var(--color-sand);
+    color: #241a06;
+}
+
+.icon-btn[data-action="toggle"]:hover:not(:disabled) {
+    background: var(--color-sand-light);
+    border-color: var(--color-sand-light);
+}
+
+/* ─── CARD CONFIG PANEL (setup: minutes, label, color, sound) ── */
+/* [hidden] must win over the plain-class display:flex rules below —
+   author styles otherwise beat the UA stylesheet's own [hidden] rule
+   regardless of specificity, so toggling the `hidden` property from JS
+   would silently do nothing without this. */
+.card-toolbar[hidden],
+.card-config-panel[hidden] {
+    display: none;
+}
+
+.card-config-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    max-width: 220px;
+    padding: var(--sp-3);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
+.label-control {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+}
+
+.label-control label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.label-control input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font), sans-serif;
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    background: var(--color-bg-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.6rem;
+}
+
+.label-control input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.swatch-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-2);
+}
+
+.swatch-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--swatch-color);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform var(--t-fast), border-color var(--t-fast);
+}
+
+.swatch-btn:hover {
+    transform: scale(1.12);
+}
+
+.swatch-btn.is-active {
+    border-color: var(--color-text);
+}
+
+.sound-row {
+    display: flex;
+    gap: var(--sp-2);
+}
+
+.sound-btn {
+    width: 28px;
+    height: 28px;
+    font-family: var(--font), sans-serif;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+
+.sound-btn:hover {
+    color: var(--color-text);
+    border-color: var(--color-accent-dim);
+}
+
+.sound-btn.is-active {
+    color: var(--color-bg);
+    background: var(--color-sand);
+    border-color: var(--color-sand);
+}
+
+.config-actions {
+    display: flex;
+    gap: var(--sp-2);
+    width: 100%;
+}
+
+.config-actions .btn {
+    flex: 1;
+    padding: 0.5rem 0.8rem;
+    font-size: var(--text-sm);
 }
 
 .hourglass-canvas-wrap {
