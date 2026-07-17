@@ -412,6 +412,10 @@
             card.glass.pause();
             card.el.remove();
             cards.splice(idx, 1);
+            // Automatic mode only means anything with 2+ cards to chain —
+            // dropping to one turns it back off rather than leaving it
+            // silently armed with its toggle now hidden (see refreshUI).
+            if (cards.length <= 1) autoMode = false;
             updateRowLayout();
             refreshUI();
         }
@@ -744,7 +748,7 @@
                 cards.forEach((c) => { c.glass.resetOnFlip = resetOnFlip; });
             },
             setAutoMode(v) {
-                v = !!v;
+                v = !!v && cards.length > 1; // needs at least 2 cards to mean anything
                 if (v === autoMode) return;
                 autoMode = v;
                 if (!autoMode) stopSequence(); // stopSequence() already runs refreshUI()

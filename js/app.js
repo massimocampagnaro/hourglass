@@ -15,6 +15,7 @@
     const muteBtn = document.getElementById('muteBtn');
     const physicalFlipToggle = document.getElementById('physicalFlipToggle');
     const pomodoroBtn = document.getElementById('pomodoroBtn');
+    const autoModeRow = document.getElementById('autoModeRow');
     const autoModeToggle = document.getElementById('autoModeToggle');
 
     // Whether to reset on flip and whether sound is muted are personal,
@@ -72,11 +73,20 @@
     }
     syncMuteButton();
 
+    // Automatic mode only means anything once there's a second card to
+    // chain to — cardManager already refuses to turn it on (or keep it on)
+    // with a single card, this just keeps the toggle itself out of sight
+    // in that case instead of showing a control with nothing to control.
+    function syncAutoModeVisibility() {
+        autoModeRow.hidden = cardManager.getCardCount() <= 1;
+    }
+
     const cardManager = HourglassCards.createCardManager(rowEl, {
         muted,
         resetOnFlip,
         onChange: () => {
             autoModeToggle.checked = cardManager.isAutoMode();
+            syncAutoModeVisibility();
             syncUrl();
         },
     });

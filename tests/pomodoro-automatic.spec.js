@@ -56,6 +56,24 @@ test('turning automatic mode off stops any running sequence', async ({ page }) =
     await expect(focus).not.toHaveClass(/is-sequence-active/);
 });
 
+test('the Automatic mode toggle is hidden with one card and reappears with two', async ({ page }) => {
+    const autoModeRow = page.locator('#autoModeRow');
+    await expect(autoModeRow).toBeHidden();
+
+    await page.locator('.hourglass-card--add').click();
+    await page.locator('.hourglass-card.is-configuring [data-action="save"]').click();
+    await expect(autoModeRow).toBeVisible();
+
+    // enabling it, then dropping back to one card, turns it back off too —
+    // no orphaned "on" state left behind once its toggle is hidden again
+    await page.getByText('Automatic mode').click();
+    await expect(page.locator('#autoModeToggle')).toBeChecked();
+    await page.locator('.hourglass-card:not(.hourglass-card--add)').nth(1)
+        .locator('[data-action="remove"]').click();
+    await expect(autoModeRow).toBeHidden();
+    await expect(page.locator('#autoModeToggle')).not.toBeChecked();
+});
+
 test('a real 1-minute card genuinely auto-advances to the next one when it finishes', async ({ page }) => {
     test.setTimeout(120_000);
 

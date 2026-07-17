@@ -104,14 +104,6 @@ body {
     gap: var(--sp-6);
 }
 
-.global-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: var(--sp-4);
-}
-
 .hourglass-shell {
     position: relative;
     width: min(300px, calc(100vw - 2 * var(--sp-4))); /* full size until it'd overflow */
@@ -475,13 +467,30 @@ body {
 }
 
 /* ─── CONTROLS ───────────────────────────────────────────── */
+/* A bigger gap between the button row / toggle group / hints keeps those
+   three clusters visually distinct; each cluster uses its own tighter
+   gap internally so related controls still read as one group. */
 .controls {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--sp-4);
+    gap: var(--sp-6);
     width: 100%;
     max-width: 320px;
+}
+
+.toggle-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+.hints {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
 }
 
 .duration-control {
@@ -592,6 +601,25 @@ body {
     border-color: var(--color-sand-light);
 }
 
+/* A little more presence than the plain .btn — Pomodoro is the one
+   preset worth calling out on its own, sitting right above the row
+   instead of blending into the row of small icon buttons below it. */
+.btn-pomodoro {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    border-color: rgba(224, 72, 63, 0.35);
+}
+
+.btn-pomodoro:hover {
+    border-color: rgba(224, 72, 63, 0.7);
+}
+
+.btn-pomodoro svg {
+    display: block;
+    flex-shrink: 0;
+}
+
 /* ─── CORNER LINKS (portfolio / mute) ────────────────────── */
 .corner-link {
     position: fixed;
@@ -650,6 +678,13 @@ body {
     color: var(--color-text-muted);
     cursor: pointer;
     user-select: none;
+}
+
+/* [hidden] needs the id's extra specificity to beat the plain-class
+   display:flex rule above — same reasoning as the card toolbar/config
+   panel [hidden] rules; used to hide Automatic mode with 1 card. */
+#autoModeRow[hidden] {
+    display: none;
 }
 
 .toggle-row input {
