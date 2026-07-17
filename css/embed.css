@@ -1,12 +1,8 @@
 /* ============================================================
-   css/embed.css — layout overrides for the embeddable widget.
-   Loaded after css/style.css — same tokens/classes, just a
-   transparent, iframe-sized layout instead of a full page.
+   css/embed.css — layout overrides for the embeddable widget, loaded after css/style.css.
    ============================================================ */
 
-/* Rotating the shell during the flip can overflow the page (transforms
-   count toward scrollable overflow); this clips it instead of showing
-   a scrollbar. Needed on both html and body. */
+/* Flip rotation can overflow the page; clip instead of showing a scrollbar. */
 html, body.embed-body {
     overflow: hidden;
 }
@@ -24,14 +20,11 @@ body.embed-body {
 }
 
 .embed-body .hourglass-shell {
-    /* 40vh * 1.75 (glass aspect ratio) = 70% max, always leaving room
-       below it for padding/gap/time text. */
-    width: min(60vw, 40vh, 200px);
+    width: min(60vw, 40vh, 200px); /* 40vh * 1.75 aspect ratio = 70% max, leaving room for padding/gap/time */
     filter: none;
 }
 
-/* ?theme=light — for embedding on a light host page. Only the time text's
-   color flips; the hourglass itself is unchanged either way. */
+/* ?theme=light — only the time text's color flips, the hourglass stays the same. */
 .embed-body[data-theme="light"] .time-readout {
     color: var(--color-bg);
 }

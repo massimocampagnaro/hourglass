@@ -1,34 +1,22 @@
 /* ============================================================
-   js/app.js — UI wiring for the single hourglass (Phase 1)
+   js/app.js — page chrome: wires js/cards.js up to the header
+   controls, the popout button, and keyboard shortcuts.
    ============================================================ */
 
 (function () {
     'use strict';
 
-    const wrap = document.getElementById('hourglassWrap');
-    const shell = document.getElementById('hourglassShell');
-    const durationInput = document.getElementById('durationInput');
-    const presetRow = document.getElementById('presetRow');
-    const startPauseBtn = document.getElementById('startPauseBtn');
-    const resetBtn = document.getElementById('resetBtn');
+    const rowEl = document.getElementById('hourglassRow');
     const popOutBtn = document.getElementById('popOutBtn');
     const muteBtn = document.getElementById('muteBtn');
-    const timeReadout = document.getElementById('timeReadout');
     const physicalFlipToggle = document.getElementById('physicalFlipToggle');
+    const pomodoroBtn = document.getElementById('pomodoroBtn');
+    const autoModeRow = document.getElementById('autoModeRow');
+    const autoModeToggle = document.getElementById('autoModeToggle');
 
-    // Whether to reset on flip is a personal, ongoing preference (not
-    // something you'd want to share via a link), so it lives in
-    // localStorage rather than the URL — set once, remembered silently
-    // across reloads.
-    //
-    // Default is reset-on-flip: for a Pomodoro-style timer, "flip = start
-    // the next session fresh" is the expected behavior (like turning over
-    // a kitchen timer). The toggle is the opt-in exception — flip the
-    // hourglass but let the sand actually pour across for real, mirroring
-    // however much time was left — so it reads naturally unchecked
-    // (= default) / checked (= this fancier opt-in mode), rather than
-    // shipping a checkbox that's already ticked the first time you see it.
+    // Personal preferences, not shareable via link — localStorage, not the URL.
     const RESET_ON_FLIP_STORAGE_KEY = 'hourglass:resetOnFlip';
+    const MUTED_STORAGE_KEY = 'hourglass:muted';
 
     function loadResetOnFlipPreference() {
         try {
@@ -47,14 +35,11 @@
         }
     }
 
-    // Same rationale as RESET_ON_FLIP_STORAGE_KEY: personal preference, not shareable via URL.
-    const MUTED_STORAGE_KEY = 'hourglass:muted';
-
     function loadMutedPreference() {
         try {
             return localStorage.getItem(MUTED_STORAGE_KEY) === '1';
         } catch {
-            return false; // storage unavailable (private browsing, quota, etc.)
+            return false;
         }
     }
 
@@ -62,16 +47,13 @@
         try {
             localStorage.setItem(MUTED_STORAGE_KEY, muted ? '1' : '0');
         } catch {
-            // ignore — nothing useful to do if storage is unavailable
+            // ignore
         }
     }
 
-    const glass = new Hourglass(wrap);
+    let muted = loadMutedPreference();
     const resetOnFlip = loadResetOnFlipPreference();
     physicalFlipToggle.checked = !resetOnFlip;
-    glass.resetOnFlip = resetOnFlip;
-
-    let muted = loadMutedPreference();
 
     const VOLUME_ON_SVG = '<svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" focusable="false"><path d="M760-481q0-83-44-151.5T598-735q-15-7-22-21.5t-2-29.5q6-16 21.5-23t31.5 0q97 43 155 131.5T840-481q0 108-58 196.5T627-153q-16 7-31.5 0T574-176q-5-15 2-29.5t22-21.5q74-34 118-102.5T760-481ZM280-360H160q-17 0-28.5-11.5T120-400v-160q0-17 11.5-28.5T160-600h120l132-132q19-19 43.5-8.5T480-703v446q0 27-24.5 37.5T412-228L280-360Zm380-120q0 42-19 79.5T591-339q-10 6-20.5.5T560-356v-250q0-12 10.5-17.5t20.5.5q31 25 50 63t19 80ZM400-606l-86 86H200v80h114l86 86v-252ZM300-480Z"/></svg>';
     const VOLUME_OFF_SVG = '<svg width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" focusable="false"><path d="m720-424-76 76q-11 11-28 11t-28-11q-11-11-11-28t11-28l76-76-76-76q-11-11-11-28t11-28q11-11 28-11t28 11l76 76 76-76q11-11 28-11t28 11q11 11 11 28t-11 28l-76 76 76 76q11 11 11 28t-11 28q-11 11-28 11t-28-11l-76-76Zm-440 64H160q-17 0-28.5-11.5T120-400v-160q0-17 11.5-28.5T160-600h120l132-132q19-19 43.5-8.5T480-703v446q0 27-24.5 37.5T412-228L280-360Zm120-246-86 86H200v80h114l86 86v-252ZM300-480Z"/></svg>';
@@ -83,69 +65,41 @@
     }
     syncMuteButton();
 
+    // Automatic mode needs 2+ cards; cardManager already refuses to turn it on with one — this just hides the toggle to match.
+    function syncAutoModeVisibility() {
+        autoModeRow.hidden = cardManager.getCardCount() <= 1;
+    }
+
+    const cardManager = HourglassCards.createCardManager(rowEl, {
+        muted,
+        resetOnFlip,
+        onChange: () => {
+            autoModeToggle.checked = cardManager.isAutoMode();
+            syncAutoModeVisibility();
+            syncUrl();
+        },
+    });
+
     muteBtn.addEventListener('click', () => {
         muted = !muted;
         saveMutedPreference(muted);
         syncMuteButton();
+        cardManager.setMuted(muted);
     });
 
-    function syncPresetButtons(minutes) {
-        presetRow.querySelectorAll('.preset-btn').forEach((btn) => {
-            btn.classList.toggle('is-active', Number(btn.dataset.minutes) === minutes);
-        });
-    }
-
-    function setMinutes(minutes) {
-        minutes = HourglassShared.clampMinutes(minutes);
-        durationInput.value = minutes;
-        syncPresetButtons(minutes);
-        glass.setDuration(minutes);
-    }
-
-    // Mirrors the current minutes/running state into the address bar so the
-    // page can be bookmarked or shared as-is. Uses replaceState (not
-    // pushState) so this never touches browser history — otherwise every
-    // preset click or start/pause would add a back-button stop.
-    //
-    // `forceRunning` exists because glass.flip() resumes asynchronously
-    // (it pauses immediately, then restarts once the spin/pour finishes) —
-    // reading glass.running right after calling flip() would catch that
-    // brief paused instant and wrongly drop autostart, even though a flip
-    // always ends up running again.
-    function syncUrl(forceRunning) {
-        const params = new URLSearchParams();
-        params.set('minutes', durationInput.value);
-        if (forceRunning || glass.running) params.set('autostart', '1');
-        history.replaceState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
-    }
-
-    glass.onTick = (remainingMs) => {
-        timeReadout.textContent = HourglassShared.formatTime(remainingMs);
-    };
-
-    glass.onDone = () => {
-        startPauseBtn.textContent = 'Start';
-        timeReadout.classList.add('is-done');
-        if (!muted) HourglassShared.playDoneSound();
-    };
-
-    startPauseBtn.addEventListener('click', () => {
-        if (glass.running) {
-            glass.pause();
-            startPauseBtn.textContent = 'Start';
-        } else {
-            timeReadout.classList.remove('is-done');
-            glass.start();
-            startPauseBtn.textContent = 'Pause';
-        }
-        syncUrl();
+    physicalFlipToggle.addEventListener('change', () => {
+        const nextResetOnFlip = !physicalFlipToggle.checked;
+        saveResetOnFlipPreference(nextResetOnFlip);
+        cardManager.setResetOnFlip(nextResetOnFlip);
     });
 
-    resetBtn.addEventListener('click', () => {
-        glass.reset();
-        startPauseBtn.textContent = 'Start';
-        timeReadout.classList.remove('is-done');
-        syncUrl();
+    pomodoroBtn.addEventListener('click', () => {
+        cardManager.applyPomodoroPreset();
+        autoModeToggle.checked = true;
+    });
+
+    autoModeToggle.addEventListener('change', () => {
+        cardManager.setAutoMode(autoModeToggle.checked);
     });
 
     // Open popup in a new tab with fixed position and dimensions
@@ -163,63 +117,61 @@
         document.documentElement.classList.add('is-popout'); // sized to fit exactly, no scrollbar needed
     }
 
-    shell.addEventListener('click', () => {
-        timeReadout.classList.remove('is-done');
-        glass.flip();
-        startPauseBtn.textContent = 'Pause';
-        syncUrl(true); // flip always ends up running, even though glass.running lags behind
-    });
+    // Mirrors the row into the URL — flat contract for one card (defaults omitted), indexed h1_/h2_/h3_ for more. See readCardsFromParams.
+    const DEFAULT_COLOR_ID = HourglassShared.COLOR_PALETTE[0].id;
 
-    physicalFlipToggle.addEventListener('change', () => {
-        const nextResetOnFlip = !physicalFlipToggle.checked;
-        glass.resetOnFlip = nextResetOnFlip;
-        saveResetOnFlipPreference(nextResetOnFlip);
-    });
+    function syncUrl() {
+        const cards = cardManager.getCardsSnapshot();
+        const params = new URLSearchParams();
+        if (cardManager.isAutoMode()) params.set('auto', '1');
 
-    durationInput.addEventListener('change', () => {
-        const val = parseInt(durationInput.value, 10);
-        if (!Number.isNaN(val)) setMinutes(val);
-        syncUrl();
-    });
-
-    presetRow.addEventListener('click', (e) => {
-        const btn = e.target.closest('.preset-btn');
-        if (!btn) return;
-        setMinutes(Number(btn.dataset.minutes));
-        syncUrl();
-    });
+        if (cards.length === 1) {
+            const card = cards[0];
+            params.set('minutes', String(card.minutes));
+            if (card.colorId !== DEFAULT_COLOR_ID) params.set('color', card.colorId);
+            if (card.soundId !== HourglassShared.DEFAULT_SOUND_ID) params.set('sound', card.soundId);
+            if (card.label) params.set('label', card.label);
+            if (card.running) params.set('autostart', '1');
+        } else {
+            cards.forEach((card, i) => {
+                const prefix = `h${i + 1}_`;
+                params.set(prefix + 'minutes', String(card.minutes));
+                params.set(prefix + 'color', card.colorId);
+                params.set(prefix + 'sound', card.soundId);
+                if (card.label) params.set(prefix + 'label', card.label);
+            });
+        }
+        history.replaceState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
+    }
 
     document.addEventListener('keydown', (e) => {
-        // Skip whenever focus is on a control that already has its own
-        // keyboard handling (typing, or Space/Enter activating a button) —
-        // otherwise Space would both natively activate the focused button
-        // AND trigger startPauseBtn here, firing two different actions.
+        // Skip controls with their own keyboard handling, or Space would both activate a focused button and trigger a shortcut here.
         const tag = document.activeElement && document.activeElement.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
         if (e.metaKey || e.ctrlKey || e.altKey) return;
 
         if (e.code === 'Space') {
             e.preventDefault();
-            startPauseBtn.click();
+            cardManager.handleKeyToggle();
+            syncUrl();
         } else if (e.key === 'r' || e.key === 'R') {
             e.preventDefault();
-            resetBtn.click();
+            cardManager.handleKeyReset();
+            syncUrl();
         } else if (e.key === 'f' || e.key === 'F') {
             e.preventDefault();
-            shell.click();
+            cardManager.handleKeyFlip();
+            syncUrl();
         }
     });
 
-    // Optional query params so a timer can be shared/bookmarked pre-configured,
-    // e.g. link.html?minutes=25&autostart=1 for a one-tap Pomodoro start.
-    // Both are independent and optional — omitting either just falls back
-    // to the normal default (5 min, not running). Shared with embed/embed.js
-    // so the two entry points read the same contract.
-    const { minutes: initialMinutes, autostart } = HourglassShared.readTimerParams(window.location.search);
-    setMinutes(initialMinutes);
-
-    if (autostart) {
-        glass.start();
-        startPauseBtn.textContent = 'Pause';
+    // e.g. ?minutes=25&color=ember or ?h1_minutes=25&h1_label=Focus&h2_minutes=5&h2_label=Break&auto=1
+    const { cards: initialCardConfigs, autoMode: initialAutoMode } =
+        HourglassShared.readCardsFromParams(window.location.search);
+    cardManager.addCardsFromConfigs(initialCardConfigs);
+    if (initialAutoMode) {
+        cardManager.setAutoMode(true);
+        autoModeToggle.checked = true;
     }
+    syncUrl();
 })();

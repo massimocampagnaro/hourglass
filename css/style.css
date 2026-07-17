@@ -1,7 +1,5 @@
 /* ============================================================
-   css/style.css — Hourglass
-   Design tokens mirror the portfolio's dark theme; sand/glass
-   colors are specific to this project.
+   css/style.css — Hourglass. Design tokens mirror the portfolio's dark theme.
    ============================================================ */
 
 :root {
@@ -61,11 +59,6 @@
     }
 }
 
-html.is-popout,
-html.is-popout body {
-    overflow: hidden;
-}
-
 html.is-popout .site-footer {
     display: none;
 }
@@ -118,6 +111,293 @@ body {
     transform-style: preserve-3d;
 }
 
+.hourglass-shell.is-flip-disabled {
+    cursor: default;
+    pointer-events: none;
+}
+
+/* ─── HOURGLASS ROW (multiple cards) ─────────────────────── */
+/* 3-column grid: equal fixed-width side gutters (matching Add's own width) flank an auto middle column, so cards center regardless of count. */
+.hourglass-row {
+    display: grid;
+    grid-template-columns: min(140px, 28vw) auto min(140px, 28vw);
+    align-items: start;
+    justify-items: center;
+    gap: var(--sp-6);
+    width: 100%;
+}
+
+.hourglass-cards {
+    grid-column: 2;
+    display: flex;
+    align-items: flex-start; /* different-sized glasses still share a visual baseline */
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--sp-6);
+}
+
+/* Add is hidden at the cap (js/cards.js) — drop its gutters too so cards use the full row width. */
+.hourglass-row.is-at-max {
+    grid-template-columns: 1fr;
+}
+
+.hourglass-row.is-at-max .hourglass-cards {
+    grid-column: 1;
+}
+
+.hourglass-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+/* --hg-count/--hg-base-px/--hg-scale set by js/cards.js updateRowLayout(); unset (embed widget) falls back to 300px/1x. */
+.hourglass-card .hourglass-shell {
+    width: min(
+        calc(var(--hg-base-px, 300px) * var(--hg-scale, 1)),
+        calc((100vw - 2 * var(--sp-4) - (var(--hg-count, 1) - 1) * var(--sp-6)) / var(--hg-count, 1))
+    );
+}
+
+.hourglass-card.is-sequence-active .hourglass-shell {
+    animation: sequence-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes sequence-pulse {
+    0%, 100% { filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55)); }
+    50% { filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 14px var(--color-sand)); }
+}
+
+.card-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    letter-spacing: 0.02em;
+    min-height: 1.2em;
+}
+
+.hourglass-card--add {
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    width: min(140px, 28vw);
+    aspect-ratio: 320 / 560;
+    margin-top: var(--sp-6);
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast);
+}
+
+.hourglass-card--add:hover {
+    border-color: var(--color-accent-dim);
+    color: var(--color-text);
+}
+
+.hourglass-card--add.is-disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* [hidden] needs the extra specificity to beat the plain-class display:flex rule above. */
+.hourglass-card--add[hidden] {
+    display: none;
+}
+
+.hourglass-card--add .add-label {
+    font-size: var(--text-sm);
+}
+
+/* Narrow screens: collapse to one column, Add below the cards. Must come after the grid-column:2/3 rules above — same specificity, source order wins. */
+@media (max-width: 719px) {
+    .hourglass-row {
+        grid-template-columns: 1fr;
+    }
+
+    .hourglass-cards,
+    .hourglass-card--add {
+        grid-column: 1;
+    }
+
+    .hourglass-card--add {
+        margin-top: 0;
+    }
+}
+
+/* ─── CARD TOOLBAR (locked card: play/pause, reset, edit, remove) ── */
+.card-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    color: var(--color-text-muted);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast), opacity var(--t-fast);
+}
+
+.icon-btn:hover:not(:disabled) {
+    color: var(--color-text);
+    border-color: var(--color-accent-dim);
+}
+
+.icon-btn:active:not(:disabled) {
+    transform: scale(0.94);
+}
+
+.icon-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.icon-btn--danger:hover:not(:disabled) {
+    color: #e0605a;
+    border-color: rgba(224, 96, 90, 0.5);
+}
+
+.icon-btn[data-action="toggle"] {
+    background: var(--color-sand);
+    border-color: var(--color-sand);
+    color: #241a06;
+}
+
+.icon-btn[data-action="toggle"]:hover:not(:disabled) {
+    background: var(--color-sand-light);
+    border-color: var(--color-sand-light);
+}
+
+/* ─── CARD CONFIG PANEL (setup: minutes, label, color, sound) ── */
+/* Author styles beat the UA [hidden] rule regardless of specificity — needs this or toggling `hidden` from JS silently does nothing. */
+.card-toolbar[hidden],
+.card-config-panel[hidden] {
+    display: none;
+}
+
+.card-config-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    max-width: 220px;
+    padding: var(--sp-3);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
+.label-control {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+}
+
+.label-control label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.label-control input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font), sans-serif;
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    background: var(--color-bg-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.6rem;
+}
+
+.label-control input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.swatch-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-2);
+}
+
+.swatch-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--swatch-color);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform var(--t-fast), border-color var(--t-fast);
+}
+
+.swatch-btn:hover {
+    transform: scale(1.12);
+}
+
+.swatch-btn.is-active {
+    border-color: var(--color-text);
+}
+
+.sound-row {
+    display: flex;
+    gap: var(--sp-2);
+}
+
+.sound-btn {
+    width: 28px;
+    height: 28px;
+    font-family: var(--font), sans-serif;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+
+.sound-btn:hover {
+    color: var(--color-text);
+    border-color: var(--color-accent-dim);
+}
+
+.sound-btn.is-active {
+    color: var(--color-bg);
+    background: var(--color-sand);
+    border-color: var(--color-sand);
+}
+
+.config-actions {
+    display: flex;
+    gap: var(--sp-2);
+    width: 100%;
+}
+
+.config-actions .btn {
+    flex: 1;
+    padding: 0.5rem 0.8rem;
+    font-size: var(--text-sm);
+}
+
 .hourglass-canvas-wrap {
     position: relative;
     width: 100%;
@@ -161,13 +441,28 @@ body {
 }
 
 /* ─── CONTROLS ───────────────────────────────────────────── */
+/* Bigger gap between clusters (button row / toggle group / hints); each cluster has its own tighter internal gap. */
 .controls {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--sp-4);
+    gap: var(--sp-6);
     width: 100%;
     max-width: 320px;
+}
+
+.toggle-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+.hints {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
 }
 
 .duration-control {
@@ -278,6 +573,23 @@ body {
     border-color: var(--color-sand-light);
 }
 
+/* A little more presence than the plain .btn — Pomodoro stands out on its own above the row. */
+.btn-pomodoro {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    border-color: rgba(224, 72, 63, 0.35);
+}
+
+.btn-pomodoro:hover {
+    border-color: rgba(224, 72, 63, 0.7);
+}
+
+.btn-pomodoro svg {
+    display: block;
+    flex-shrink: 0;
+}
+
 /* ─── CORNER LINKS (portfolio / mute) ────────────────────── */
 .corner-link {
     position: fixed;
@@ -336,6 +648,11 @@ body {
     color: var(--color-text-muted);
     cursor: pointer;
     user-select: none;
+}
+
+/* [hidden] needs the id's extra specificity to beat display:flex above — hides Automatic mode with 1 card. */
+#autoModeRow[hidden] {
+    display: none;
 }
 
 .toggle-row input {

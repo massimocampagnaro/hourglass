@@ -1,0 +1,21 @@
+{
+  "name": "hourglass",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A minimal, configurable hourglass timer — use it standalone or as a Pomodoro-style focus/break timer.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/massimocampagnaro/hourglass.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/massimocampagnaro/hourglass/issues"
+  },
+  "homepage": "https://github.com/massimocampagnaro/hourglass#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}
