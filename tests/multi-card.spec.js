@@ -17,8 +17,7 @@ test('add button opens a new card in configuring state, capped at 3 cards', asyn
     await page.locator('.hourglass-card.is-configuring [data-action="save"]').click();
     await expect(page.locator('.hourglass-card:not(.hourglass-card--add)')).toHaveCount(3);
 
-    // a 4th is refused — Add disappears entirely rather than sitting
-    // there permanently disabled, and reappears once a card is removed
+    // a 4th is refused — Add disappears entirely, reappears once a card is removed
     await expect(addBtn).toBeHidden();
     await page.locator('.hourglass-card:not(.hourglass-card--add)').first()
         .locator('[data-action="remove"]').click();
@@ -66,9 +65,7 @@ test('each card gets its own scoped sand color (no cross-card leakage)', async (
     const secondColor = await cards.nth(1).evaluate((el) => getComputedStyle(el).getPropertyValue('--color-sand').trim());
     expect(firstColor).not.toBe(secondColor);
 
-    // Regression check for the SVG id-collision bug: every card renders
-    // its own <svg> with its own uniquely-suffixed gradient ids, so a
-    // second instance's sand never silently borrows the first's colors.
+    // Regression check: every card must have its own uniquely-suffixed gradient ids, not borrow another's colors.
     const gradientIds = await page.locator('.hourglass-card linearGradient[id]').evaluateAll(
         (els) => els.map((el) => el.id)
     );

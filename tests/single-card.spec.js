@@ -1,6 +1,4 @@
-// Regression coverage for the Phase 1 behavior that must still hold with
-// a single, default hourglass card: this is what a bare `index.html` visit
-// (or an old shared ?minutes=&autostart= link) looks like.
+// Default single-card behavior: a bare `index.html` visit or an old ?minutes=&autostart= link.
 const { test, expect } = require('@playwright/test');
 
 test.beforeEach(async ({ page }) => {
@@ -40,9 +38,7 @@ test('reset returns to the full duration', async ({ page }) => {
 test('clicking the hourglass flips it and commits to running', async ({ page }) => {
     const card = page.locator('.hourglass-card:not(.hourglass-card--add)').first();
     await card.locator('.hourglass-shell').click();
-    // flip() pauses immediately then only resumes ~0.3-0.5s later — the
-    // toggle icon must optimistically show "Pause" right away regardless
-    // (see js/cards.js flipPending), not lag behind the animation.
+    // toggle icon must show "Pause" right away, not lag behind flip()'s async resume (see flipPending)
     await expect(card.locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Pause');
 });
 

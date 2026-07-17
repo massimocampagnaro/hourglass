@@ -1,7 +1,5 @@
 /* ============================================================
-   css/style.css — Hourglass
-   Design tokens mirror the portfolio's dark theme; sand/glass
-   colors are specific to this project.
+   css/style.css — Hourglass. Design tokens mirror the portfolio's dark theme.
    ============================================================ */
 
 :root {
@@ -118,16 +116,8 @@ body {
     pointer-events: none;
 }
 
-/* ─── HOURGLASS ROW (Phase 2/3: multiple cards) ─────────── */
-/* Three-column grid: two side gutters of equal, fixed width (matching the
-   Add button's own width formula below) flanking an auto-sized middle
-   column that holds .hourglass-cards. The left gutter is never occupied
-   by any element — no "phantom" DOM node needed to balance Add's width,
-   the grid tracks alone guarantee the symmetry — so the real hourglasses
-   always land dead center regardless of how many there are, while Add
-   still reads as sitting beside them. Below 720px it collapses to a
-   single column, stacking Add under the cards instead of squeezing three
-   columns onto a narrow screen. */
+/* ─── HOURGLASS ROW (multiple cards) ─────────────────────── */
+/* 3-column grid: equal fixed-width side gutters (matching Add's own width) flank an auto middle column, so cards center regardless of count. */
 .hourglass-row {
     display: grid;
     grid-template-columns: min(140px, 28vw) auto min(140px, 28vw);
@@ -146,11 +136,7 @@ body {
     gap: var(--sp-6);
 }
 
-/* At the 3-card cap, Add is hidden entirely (see js/cards.js refreshUI) —
-   this drops the two reserved side gutters too, so the cards get the
-   full row width to center in instead of leaving a phantom margin on
-   both sides where Add used to be. Higher specificity than the plain
-   .hourglass-row rule above, so it wins regardless of source order. */
+/* Add is hidden at the cap (js/cards.js) — drop its gutters too so cards use the full row width. */
 .hourglass-row.is-at-max {
     grid-template-columns: 1fr;
 }
@@ -167,10 +153,7 @@ body {
     gap: var(--sp-3);
 }
 
-/* One row's cards share --hg-count (set on the row) and each card's own
-   --hg-base-px/--hg-scale (set per card from its duration) — see js/cards.js
-   updateRowLayout(). Falls back to the original fixed 300px/1x when unset,
-   so nothing here affects the embed widget, which never sets these vars. */
+/* --hg-count/--hg-base-px/--hg-scale set by js/cards.js updateRowLayout(); unset (embed widget) falls back to 300px/1x. */
 .hourglass-card .hourglass-shell {
     width: min(
         calc(var(--hg-base-px, 300px) * var(--hg-scale, 1)),
@@ -223,9 +206,7 @@ body {
     pointer-events: none;
 }
 
-/* [hidden] needs the extra attribute-selector specificity to beat the
-   plain-class display:flex rule above — same reasoning as the toolbar/
-   config-panel [hidden] rule further down. */
+/* [hidden] needs the extra specificity to beat the plain-class display:flex rule above. */
 .hourglass-card--add[hidden] {
     display: none;
 }
@@ -234,11 +215,7 @@ body {
     font-size: var(--text-sm);
 }
 
-/* Collapses the 3-column grid to one on narrow screens: Add wraps below
-   the cards instead of squeezing three columns into too little width.
-   Must come after the unconditional grid-column:2/3 rules above — same
-   specificity, so source order (not the media query) decides the winner
-   when both apply. */
+/* Narrow screens: collapse to one column, Add below the cards. Must come after the grid-column:2/3 rules above — same specificity, source order wins. */
 @media (max-width: 719px) {
     .hourglass-row {
         grid-template-columns: 1fr;
@@ -306,10 +283,7 @@ body {
 }
 
 /* ─── CARD CONFIG PANEL (setup: minutes, label, color, sound) ── */
-/* [hidden] must win over the plain-class display:flex rules below —
-   author styles otherwise beat the UA stylesheet's own [hidden] rule
-   regardless of specificity, so toggling the `hidden` property from JS
-   would silently do nothing without this. */
+/* Author styles beat the UA [hidden] rule regardless of specificity — needs this or toggling `hidden` from JS silently does nothing. */
 .card-toolbar[hidden],
 .card-config-panel[hidden] {
     display: none;
@@ -467,9 +441,7 @@ body {
 }
 
 /* ─── CONTROLS ───────────────────────────────────────────── */
-/* A bigger gap between the button row / toggle group / hints keeps those
-   three clusters visually distinct; each cluster uses its own tighter
-   gap internally so related controls still read as one group. */
+/* Bigger gap between clusters (button row / toggle group / hints); each cluster has its own tighter internal gap. */
 .controls {
     display: flex;
     flex-direction: column;
@@ -601,9 +573,7 @@ body {
     border-color: var(--color-sand-light);
 }
 
-/* A little more presence than the plain .btn — Pomodoro is the one
-   preset worth calling out on its own, sitting right above the row
-   instead of blending into the row of small icon buttons below it. */
+/* A little more presence than the plain .btn — Pomodoro stands out on its own above the row. */
 .btn-pomodoro {
     display: inline-flex;
     align-items: center;
@@ -680,9 +650,7 @@ body {
     user-select: none;
 }
 
-/* [hidden] needs the id's extra specificity to beat the plain-class
-   display:flex rule above — same reasoning as the card toolbar/config
-   panel [hidden] rules; used to hide Automatic mode with 1 card. */
+/* [hidden] needs the id's extra specificity to beat display:flex above — hides Automatic mode with 1 card. */
 #autoModeRow[hidden] {
     display: none;
 }

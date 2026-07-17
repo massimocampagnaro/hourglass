@@ -1,13 +1,6 @@
 /* ============================================================
-   js/cards.js — Phase 2/3: multiple hourglasses side by side.
-
-   Owns the row of hourglass "cards" (up to MAX_CARDS): building
-   their DOM, the configuring/locked state machine (setup panel
-   vs. compact icon toolbar), per-card color/sound/label, the
-   Pomodoro preset, and the automatic mode sequencer that chains
-   cards together in a loop until stopped. js/app.js wires this
-   manager up to the page's global chrome (mute, keep-sand-on-flip,
-   automatic-mode toggle, Pomodoro button, keyboard shortcuts).
+   js/cards.js — owns the row of hourglass cards: DOM, config
+   panel, Pomodoro preset, automatic-mode sequencer.
    ============================================================ */
 
 (function () {
@@ -21,10 +14,7 @@
 
     const PRESET_MINUTES = [5, 25, 30, 60];
 
-    // Base "scale 1.0" ceiling, in px, before a card's own duration-based
-    // --hg-scale is applied — shrinks as more cards share the row so 2-3
-    // of them comfortably sit side by side instead of only ever being
-    // constrained by the viewport-width clamp.
+    // "Scale 1.0" ceiling in px before a card's own --hg-scale applies — shrinks as the row fills up.
     const COUNT_BASE_PX = { 1: 300, 2: 230, 3: 180 };
 
     const PLAY_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><polygon points="7,4 20,12 7,20" fill="currentColor"/></svg>';
@@ -41,9 +31,7 @@
         return unused ? unused.id : COLOR_PALETTE[existingColorIds.length % COLOR_PALETTE.length].id;
     }
 
-    // Same idea as pickDefaultColorId, in SOUND_IDS' own 1/2/3 order: the
-    // first sound not already claimed by another card, so a fresh card
-    // never starts out silently duplicating a sound that's already in use.
+    // Same idea as pickDefaultColorId: first sound not already claimed.
     function pickDefaultSoundId(existingSoundIds) {
         const unused = SOUND_IDS.find((id) => !existingSoundIds.includes(id));
         return unused || SOUND_IDS[existingSoundIds.length % SOUND_IDS.length];
@@ -60,10 +48,7 @@
         let configuringId = null;
         const sequence = { active: false, index: -1 };
 
-        // Real cards live in their own inner group; .hourglass-row (see
-        // css/style.css) is a 3-column grid that keeps this group
-        // centered regardless of how many cards it holds, with the Add
-        // button pinned in its own column to the side.
+        // Real cards live in their own group; .hourglass-row is a 3-column grid that keeps it centered.
         const cardsWrapEl = document.createElement('div');
         cardsWrapEl.className = 'hourglass-cards';
         rowEl.appendChild(cardsWrapEl);
@@ -412,10 +397,7 @@
             card.glass.pause();
             card.el.remove();
             cards.splice(idx, 1);
-            // Automatic mode only means anything with 2+ cards to chain —
-            // dropping to one turns it back off rather than leaving it
-            // silently armed with its toggle now hidden (see refreshUI).
-            if (cards.length <= 1) autoMode = false;
+            if (cards.length <= 1) autoMode = false; // needs 2+ cards to mean anything
             updateRowLayout();
             refreshUI();
         }
@@ -466,7 +448,7 @@
         // ─── manual + automatic playback ────────────────────
         function handleToggle(card) {
             if (!autoMode) {
-                if (card.flipPending) return; // a flip is already committing to "running" a few hundred ms from now; let it settle
+                if (card.flipPending) return; // let the pending flip settle first
                 if (card.glass.running) {
                     card.glass.pause();
                 } else {
@@ -505,13 +487,7 @@
         function handleShellClick(card) {
             if (autoMode || configuringId != null) return;
             card.timeEl.classList.remove('is-done');
-            // flip() pauses immediately, then only actually resumes (running
-            // becomes true) once its spin/pour animation finishes a few
-            // hundred ms later — reading card.glass.running right now would
-            // catch that brief paused instant. A flip always ends up
-            // running though, so the toggle icon can commit to that outcome
-            // immediately; flipPending is cleared (and the icon reconciled,
-            // in case something else interrupted it) once the flip settles.
+            // flip() only actually resumes running after its spin/pour animation settles; commit the icon to that outcome now.
             card.flipPending = true;
             card.glass.flip();
             refreshUI();
@@ -596,17 +572,14 @@
                 card.removeBtn.disabled = lockControls || cards.length <= 1;
                 card.shellEl.classList.toggle('is-flip-disabled', autoMode || configActive);
             });
-            // At the 3-card cap, Add isn't just disabled — there's nothing
-            // left it could ever do, so it disappears entirely rather than
-            // sitting there permanently greyed out. Below the cap it stays
-            // visible but disabled while configuring/a sequence is running.
+            // At the cap, Add disappears entirely instead of sitting there disabled.
             const atMax = cards.length >= MAX_CARDS;
             addBtnEl.hidden = atMax;
             addBtnEl.classList.toggle('is-disabled', configActive || sequence.active);
             addBtnEl.setAttribute('aria-disabled', String(configActive || sequence.active));
             rowEl.classList.toggle('is-at-max', atMax);
             rowEl.classList.toggle('is-sequence-running', sequence.active);
-            onChange(); // refreshUI runs after every discrete state change, so this is the one place that needs to notify the host page (URL sync, popout visibility, etc.)
+            onChange(); // notify the host page after every state change
         }
 
         // ─── event delegation ────────────────────────────────
@@ -677,13 +650,7 @@
             return cards[0] || null;
         }
 
-        // Bootstraps the row from parsed URL config (see
-        // HourglassShared.readCardsFromParams) — one entry for the legacy
-        // single-card link format, up to MAX_CARDS for the indexed
-        // h1_/h2_/h3_ one. A null colorId/soundId in a config auto-picks
-        // the same "first not already in use" default the Add button
-        // does, so a link that only specifies minutes for two cards still
-        // gets them visually distinct instead of both defaulting to amber.
+        // Bootstraps the row from parsed URL config; null colorId/soundId auto-picks like the Add button does.
         function addCardsFromConfigs(configs) {
             configs.slice(0, MAX_CARDS).forEach((cfg) => {
                 const card = {
@@ -702,9 +669,7 @@
             refreshUI();
         }
 
-        // Current row state, in display order — used to mirror it back
-        // into the URL (see js/app.js syncUrl) so a copied link restores
-        // the same setup.
+        // Current row state, in display order — mirrored into the URL by js/app.js.
         function getCardsSnapshot() {
             return cards.map((c) => ({
                 minutes: c.minutes,

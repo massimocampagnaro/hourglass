@@ -1,10 +1,6 @@
 /* ============================================================
-   js/app.js — page chrome + orchestration for the hourglass row.
-   The row itself (cards, Pomodoro preset, automatic-mode
-   sequencer) is owned by js/cards.js; this file wires that
-   manager up to the header controls (mute, keep-sand-on-flip,
-   Pomodoro button, automatic-mode toggle), the popout button,
-   and keyboard shortcuts.
+   js/app.js — page chrome: wires js/cards.js up to the header
+   controls, the popout button, and keyboard shortcuts.
    ============================================================ */
 
 (function () {
@@ -18,11 +14,7 @@
     const autoModeRow = document.getElementById('autoModeRow');
     const autoModeToggle = document.getElementById('autoModeToggle');
 
-    // Whether to reset on flip and whether sound is muted are personal,
-    // ongoing preferences (not something you'd want to share via a link),
-    // so they live in localStorage rather than the URL — set once and
-    // remembered silently across reloads. See the (identical) rationale
-    // this carries over from the Phase 1 single-hourglass version.
+    // Personal preferences, not shareable via link — localStorage, not the URL.
     const RESET_ON_FLIP_STORAGE_KEY = 'hourglass:resetOnFlip';
     const MUTED_STORAGE_KEY = 'hourglass:muted';
 
@@ -73,10 +65,7 @@
     }
     syncMuteButton();
 
-    // Automatic mode only means anything once there's a second card to
-    // chain to — cardManager already refuses to turn it on (or keep it on)
-    // with a single card, this just keeps the toggle itself out of sight
-    // in that case instead of showing a control with nothing to control.
+    // Automatic mode needs 2+ cards; cardManager already refuses to turn it on with one — this just hides the toggle to match.
     function syncAutoModeVisibility() {
         autoModeRow.hidden = cardManager.getCardCount() <= 1;
     }
@@ -128,13 +117,7 @@
         document.documentElement.classList.add('is-popout'); // sized to fit exactly, no scrollbar needed
     }
 
-    // Mirrors the whole row into the address bar so the page can be
-    // bookmarked or shared as-is — one hourglass keeps the original flat
-    // ?minutes=&autostart= contract (plus the new &color=&sound=&label=,
-    // each omitted when it's just the default so an untouched single
-    // card still produces the same minimal URL as before); two or three
-    // use the indexed h1_/h2_/h3_ form. See HourglassShared.readCardsFromParams
-    // for the matching read side.
+    // Mirrors the row into the URL — flat contract for one card (defaults omitted), indexed h1_/h2_/h3_ for more. See readCardsFromParams.
     const DEFAULT_COLOR_ID = HourglassShared.COLOR_PALETTE[0].id;
 
     function syncUrl() {
@@ -162,10 +145,7 @@
     }
 
     document.addEventListener('keydown', (e) => {
-        // Skip whenever focus is on a control that already has its own
-        // keyboard handling (typing, or Space/Enter activating a button) —
-        // otherwise Space would both natively activate the focused button
-        // AND trigger a shortcut here, firing two different actions.
+        // Skip controls with their own keyboard handling, or Space would both activate a focused button and trigger a shortcut here.
         const tag = document.activeElement && document.activeElement.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
         if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -185,13 +165,7 @@
         }
     });
 
-    // Optional query params so the whole row can be shared/bookmarked
-    // pre-configured, e.g. link.html?minutes=25&autostart=1&color=ember
-    // for a one-tap custom start, or link.html?h1_minutes=25&h1_label=Focus
-    // &h2_minutes=5&h2_label=Break&auto=1 for a from-scratch Pomodoro link.
-    // See HourglassShared.readCardsFromParams for the full contract —
-    // shared with embed/embed.js only for the ?minutes=&autostart= part,
-    // so the two entry points can't drift apart on that shared subset.
+    // e.g. ?minutes=25&color=ember or ?h1_minutes=25&h1_label=Focus&h2_minutes=5&h2_label=Break&auto=1
     const { cards: initialCardConfigs, autoMode: initialAutoMode } =
         HourglassShared.readCardsFromParams(window.location.search);
     cardManager.addCardsFromConfigs(initialCardConfigs);

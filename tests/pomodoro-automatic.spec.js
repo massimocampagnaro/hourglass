@@ -64,8 +64,7 @@ test('the Automatic mode toggle is hidden with one card and reappears with two',
     await page.locator('.hourglass-card.is-configuring [data-action="save"]').click();
     await expect(autoModeRow).toBeVisible();
 
-    // enabling it, then dropping back to one card, turns it back off too —
-    // no orphaned "on" state left behind once its toggle is hidden again
+    // dropping back to one card turns it off too — no orphaned "on" state once its toggle is hidden
     await page.getByText('Automatic mode').click();
     await expect(page.locator('#autoModeToggle')).toBeChecked();
     await page.locator('.hourglass-card:not(.hourglass-card--add)').nth(1)
@@ -77,10 +76,7 @@ test('the Automatic mode toggle is hidden with one card and reappears with two',
 test('a real 1-minute card genuinely auto-advances to the next one when it finishes', async ({ page }) => {
     test.setTimeout(120_000);
 
-    // Two custom 1-minute cards (the fastest a real, non-mocked run of the
-    // production timer engine can exercise) — proves the actual chain:
-    // card finishes -> its done sound fires -> the next card resets and
-    // starts -> loops, exactly the mechanism the Pomodoro flow relies on.
+    // Two real (non-mocked) 1-minute cards — proves card finishes -> next resets and starts -> loops.
     const first = page.locator('.hourglass-card:not(.hourglass-card--add)').first();
     await first.locator('[data-action="edit"]').click();
     await page.locator('.hourglass-card.is-configuring .duration-input').fill('1');

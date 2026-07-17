@@ -1,9 +1,5 @@
 /* ============================================================
-   js/hourglass.js — Hourglass rendering + timer engine
-   Vanilla JS, no dependencies. Builds an SVG glass silhouette
-   from a single width-profile function, then derives the sand
-   fill shapes from that same function so glass and sand always
-   line up exactly.
+   js/hourglass.js — SVG rendering + timer engine for one hourglass.
    ============================================================ */
 
 (function () {
@@ -26,13 +22,7 @@
     const SHOULDER_FRACTION = 0.32; // how far down the rim-to-neck span the bulge peaks (0=rim, 1=neck)
 
     const SPIN_DURATION_MS = 480; // matches css var(--t-flip)
-    // The pour starts once the spin has covered ~3/4 of its 180°, not once
-    // it's fully upright — measured empirically since the css easing isn't
-    // linear (0.56 of SPIN_DURATION_MS lands right around 135° with the
-    // current cubic-bezier). The last quarter-turn then finishes while sand
-    // is already sliding, which reads fine since the shell is nearly
-    // upright by that point — unlike starting the pour mid-spin at odd
-    // diagonal angles.
+    // Pour starts at 56% of the spin (~135° with the current cubic-bezier easing), not once fully upright.
     const POUR_START_DELAY_MS = SPIN_DURATION_MS * 0.56;
     const TRANSFER_MIN_MS = 130; // pour-across duration for a near-empty bulb
     const TRANSFER_MAX_MS = 560; // pour-across duration for a nearly-full bulb
@@ -40,26 +30,15 @@
     const DRAIN_DIP_MAX = 9;   // max crater depth on a draining surface
     const FILL_PEAK_MAX = 15;  // max mound height on a filling surface
 
-    // Grain physics integrates velocity/position step by step, so it falls
-    // apart with a huge dt — e.g. after the tab was backgrounded, browsers
-    // throttle or fully pause requestAnimationFrame, and the first frame
-    // back can report a multi-second gap. Fed straight into the physics,
-    // that reads as grains rocketing far past where they should land in a
-    // single step (seen as big, sparse, slow-looking "discs" once things
-    // catch up). The sand LEVEL itself is unaffected since it's computed
-    // straight from absolute elapsed time, not integrated incrementally —
-    // only this per-frame particle step needs a sanity cap.
+    // Caps dt fed into grain physics — a huge gap (e.g. tab was backgrounded) would otherwise fling grains way past where they should land.
     const MAX_PARTICLE_FRAME_MS = 50;
-    const MAX_FILL_FRACTION = 0.86; // sand never fills more than this fraction of a
-                                     // bulb's geometric volume, so it never appears
-                                     // to touch the rim (top) or crowd the neck (bottom)
+    const MAX_FILL_FRACTION = 0.86; // sand never fills more than this fraction of a bulb's volume
 
     function lerp(a, b, t) { return a + (b - a) * t; }
     function clamp(value, lo, hi) { return value < lo ? lo : value > hi ? hi : value; }
     function smoothstep(t) { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); }
 
-    // Half-width of the glass between rim and neck.
-    // neckProgress: 0 at the rim, 1 at the neck.
+    // Half-width of the glass between rim and neck. neckProgress: 0 at the rim, 1 at the neck.
     function halfWidthProfile(neckProgress) {
         if (neckProgress <= SHOULDER_FRACTION) {
             const t = neckProgress / SHOULDER_FRACTION;
@@ -69,8 +48,7 @@
         return lerp(SHOULDER_HALF_WIDTH, NECK_HALF_WIDTH, smoothstep(t));
     }
 
-    // Half-width of the glass at an absolute SVG y — picks the top or
-    // bottom bulb's profile depending on which side of the neck we're on.
+    // Half-width at an absolute SVG y — picks the top or bottom bulb's profile.
     function halfWidthAt(y) {
         if (y <= NECK_Y) {
             const neckProgress = (y - TOP_RIM_Y) / (NECK_Y - TOP_RIM_Y);
@@ -81,11 +59,7 @@
     }
 
     // ─── Cumulative "area" tables for volume-correct sand levels ──
-    // Builds a lookup table of (y, cumulative area) samples by integrating
-    // the glass's width from yStart to yEnd. This lets us convert "how much
-    // of this bulb's volume is filled" into an actual y coordinate, so sand
-    // levels move at a physically plausible (non-linear) rate instead of
-    // just interpolating height in a straight line.
+    // Lookup table of (y, cumulative area) so "volume filled" converts to a y coordinate at a physically plausible, non-linear rate.
     function buildAreaTable(yStart, yEnd, steps) {
         const sampledYs = new Array(steps + 1);
         const sampledHalfWidths = new Array(steps + 1);
@@ -104,9 +78,7 @@
         return { sampledYs, cumulativeArea, totalArea: cumulativeArea[steps] };
     }
 
-    // Inverse lookup: given a target cumulative area, find the y where the
-    // table's running total reaches it (binary search, then interpolate
-    // between the two bracketing samples for sub-step precision).
+    // Inverse lookup: y where the table's running total reaches targetArea (binary search + interpolation).
     function yForCumulativeArea(table, targetArea) {
         const clampedTarget = clamp(targetArea, 0, table.totalArea);
         const { sampledYs, cumulativeArea } = table;
@@ -121,9 +93,7 @@
     }
 
     // ─── Boundary point sampling (dense, used as straight segments) ──
-    // Samples the glass wall's right-hand edge into closely-spaced points.
-    // Dense enough (every 4 units) that plain straight segments between
-    // them read as a smooth curve — no actual bezier math needed.
+    // Points dense enough (every 4 units) that straight segments between them read as a smooth curve.
     function sampleWallPoints(yStart, yEnd, stepY) {
         const points = [];
         for (let y = yStart; y <= yEnd; y += stepY) {
@@ -145,12 +115,7 @@
         return element;
     }
 
-    // url(#id) references resolve against the whole document's id space, not
-    // scoped per <svg> — so with several Hourglass instances on one page,
-    // identical gradient/filter ids would all resolve to whichever
-    // instance's <defs> happened to render first (every other instance's
-    // sand would silently borrow the first instance's colors). Each
-    // instance gets its own uid suffix to keep its ids unique document-wide.
+    // url(#id) resolves document-wide, not per-<svg> — each instance needs its own uid suffix or they'd all borrow the first instance's gradient colors.
     let instanceCounter = 0;
 
     // ══════════════════════════════════════════════════════════
@@ -182,11 +147,7 @@
             this.topAreaTable = buildAreaTable(TOP_RIM_Y, NECK_Y, 120);
             this.bottomAreaTable = buildAreaTable(NECK_Y, BOTTOM_RIM_Y, 120);
 
-            // Bulb descriptors: fixed geometry, independent of which role
-            // (drain/fill) each one is currently playing. isNeckFirst tells
-            // whether the neck sits at the low-y or high-y end of `points`;
-            // towardRimSign is +1/-1, pointing from the neck toward this
-            // bulb's own rim in SVG y-space.
+            // Fixed geometry, independent of drain/fill role. isNeckFirst: neck at low-y or high-y end of `points`; towardRimSign: +1/-1 toward this bulb's rim.
             this.bulbs = {
                 top: {
                     points: this.rightTopPoints, areaTable: this.topAreaTable,
@@ -205,8 +166,7 @@
             this._updateSand(0);
         }
 
-        // Per-instance id (and the matching url(#..) reference) for defs
-        // shared within this instance's own <svg> — see instanceCounter above.
+        // Per-instance id (and matching url(#..) ref) — see instanceCounter above.
         _gid(name) { return `${name}-${this._uid}`; }
         _gref(name) { return `url(#${this._gid(name)})`; }
 
@@ -278,8 +238,7 @@
                 fill: 'none', stroke: 'rgba(225,240,250,0.55)', 'stroke-width': 2,
             }));
 
-            // glossy highlight streaks (decorative, static) — trace the actual
-            // bulb curvature, inset from the wall, faded at both ends
+            // glossy highlight streaks (decorative, static), inset from the wall, faded at both ends
             svg.appendChild(createSvgElement('path', {
                 d: this._highlightPathD(this.rightTopPoints, 0.72),
                 fill: 'none', stroke: this._gref('highlightFade'), 'stroke-width': 6,
@@ -308,8 +267,7 @@
             });
             svg.appendChild(this.streamLine);
 
-            // re-draw glass outline stroke on top of sand at the neck so the
-            // narrow waist always reads crisply over the falling stream
+            // re-draw glass outline on top of sand at the neck so the waist reads crisply over the stream
             svg.appendChild(createSvgElement('path', {
                 d: this._glassOutlineD(),
                 fill: 'none',
@@ -324,9 +282,7 @@
             this.svg = svg;
         }
 
-        // A soft reflection that hugs one bulb's real curvature, inset from
-        // the wall and clipped away from the rim/neck so it reads as a
-        // floating streak of light rather than a straight ruled line.
+        // Soft reflection hugging one bulb's curvature, clipped away from the rim/neck so it reads as a floating streak of light.
         _highlightPathD(sidePoints, inset) {
             const pointCount = sidePoints.length;
             const startIndex = Math.floor(pointCount * 0.14);
@@ -354,12 +310,7 @@
         }
 
         // ─── Sand path builders ─────────────────────────────────
-        // Generic across both bulbs and both roles: a bulb's own rim/neck
-        // never change, but which ROLE (draining vs filling) each bulb
-        // plays swaps with `parity` on every flip. `frontFrac` is 0 at
-        // this bulb's rim and 1 at its neck, for either role — draining
-        // sand always ends up on the neck side of the front, filling sand
-        // always ends up on the rim side.
+        // frontFrac is 0 at this bulb's rim, 1 at its neck; which ROLE (drain/fill) each bulb plays swaps with `parity` on every flip.
         _frontY(bulb, frontFrac) {
             frontFrac = clamp(frontFrac, 0, 1);
             const targetArea = bulb.isNeckFirst
@@ -426,10 +377,7 @@
             fillPath.setAttribute('d', this._bulbSandD(fillBulb, fillSurfaceY, 'fill', fillFrontFrac, FILL_PEAK_MAX));
             fillShade.setAttribute('d', this._bulbShadeD(fillBulb, fillSurfaceY, 'fill'));
 
-            // stream + grains always fall from the neck toward whichever
-            // bulb is currently filling, in that bulb's own "toward rim" direction.
-            // Suppressed while a post-flip pour is still settling, so the flow
-            // only resumes once the sand has actually finished resettling.
+            // Stream/grains fall toward whichever bulb is filling; hidden while a post-flip pour is still settling.
             const streamVisible = this.running && timeFrac < 1 && !this._pourActive;
             this.streamLine.setAttribute('y1', roundCoord(NECK_Y - fillBulb.towardRimSign * 4));
             this.streamLine.setAttribute('y2', roundCoord(fillSurfaceY - fillBulb.towardRimSign * 2));
@@ -467,8 +415,7 @@
             ctx.setTransform(this._canvasScaleX, 0, 0, this._canvasScaleY, 0, 0);
             ctx.clearRect(0, 0, VIEWBOX_WIDTH, VIEWBOX_HEIGHT);
 
-            // grains always fall from the neck toward whichever bulb is
-            // currently filling — `fallDirSign` picks which way that is in SVG-space
+            // grains fall from the neck toward whichever bulb is filling; fallDirSign picks the SVG-space direction
             const fallDirSign = this._fillDir || 1;
             const fillSurfaceY = this._fillSurfaceY != null ? this._fillSurfaceY : NECK_Y;
             const landingY = fallDirSign > 0
@@ -548,28 +495,11 @@
             this._notifyTick();
         }
 
-        // A real flip does two independent things: (1) mirrors elapsed
-        // time around the duration, which alone reproduces the correct
-        // sand AMOUNTS on each side (the bulbs are geometrically
-        // symmetric, so _updateSand(f) and _updateSand(1-f) are mirror
-        // images); and (2) swaps which bulb currently plays the
-        // draining vs filling role, so sand keeps flowing top-to-bottom
-        // on screen instead of reversing once the 180° rotation puts
-        // the other bulb on top.
-        //
-        // Physically, flipping doesn't just relabel each bulb — gravity
-        // reverses for whatever sand was already sitting in it, so it
-        // slides/pours across to the opposite end of that same bulb
-        // (the bit that hadn't drained yet settles onto the rim; the
-        // bit that had piled up slides off toward the neck). That pour
-        // is what actually gets animated, per bulb, in _startPourTransfer.
-        //
-        // Sequenced in two phases so each part reads clearly on its own:
-        // (1) the shell spins — sand stays exactly as it was, like a
-        // quick rigid flip too fast for anything to shift; (2) once it's
-        // upright again, the sand actually pours/settles into place.
-        // Doing both at once (spinning through odd diagonal angles while
-        // sand is also reorganizing) is what looked like noise before.
+        // Flip mirrors elapsed time around the duration (bulbs are symmetric, so
+        // _updateSand(f) and _updateSand(1-f) mirror) and swaps the drain/fill role
+        // per bulb, so sand keeps flowing top-to-bottom on screen. Sequenced in two
+        // phases — shell spins rigidly first, then sand pours into place once
+        // upright — since animating both at once through odd diagonal angles read as noise.
         flip() {
             if (this._flipPending) return;
             this._flipPending = true;
@@ -609,11 +539,7 @@
             }, POUR_START_DELAY_MS);
         }
 
-        // Fallback for "reset sand on flip" mode: no physical pour to
-        // animate (the sand just snaps back to full/empty), so instead we
-        // cross-fade the old look out while the new one is already live
-        // underneath. Simpler than a real pour, and appropriate for a mode
-        // that's explicitly a shortcut rather than a physical simulation.
+        // "Reset sand on flip" mode: no physical pour, just cross-fade the old look out over the new one already live underneath.
         _snapshotSandForCrossfade(durationMs) {
             const snapshots = [this.sandTopPath, this.sandTopShade, this.sandBottomPath, this.sandBottomShade]
                 .map((node) => node.cloneNode(true));
@@ -623,8 +549,7 @@
                 // insert above the live sand but below the neck stroke/stream
                 this.svg.insertBefore(node, this.streamLine);
             });
-            // force layout so the browser registers opacity:1 before we
-            // transition to 0 — otherwise the change gets coalesced away
+            // force layout so opacity:1 registers before transitioning to 0, or the change gets coalesced away
             void snapshots[0].getBoundingClientRect();
             requestAnimationFrame(() => {
                 snapshots.forEach((node) => { node.style.opacity = '0'; });
@@ -634,30 +559,17 @@
             }, durationMs + 60);
         }
 
-        // The persistent (never removed) sand path + shade pair for a given
-        // bulb — as opposed to the transient slabPath created per pour.
+        // Persistent sand path + shade for a bulb, as opposed to the transient slabPath created per pour.
         _livePathsForBulb(bulbKey) {
             return bulbKey === 'top'
                 ? { path: this.sandTopPath, shade: this.sandTopShade }
                 : { path: this.sandBottomPath, shade: this.sandBottomShade };
         }
 
-        // A slab of sand of fixed width (`transferAmount`, in frontFrac
-        // units) sitting at one extreme of the bulb (rim if it was
-        // 'fill', neck if it was 'drain') and rigidly sliding across to
-        // rest at the OPPOSITE extreme. Because both ends of the slab
-        // move by the same lerp, its width never changes — one
-        // continuous connected mass the whole time, no gap opening up
-        // in the middle (which is what made an earlier shrink+grow
-        // version, with two independently-sized regions, look like sand
-        // vanishing from one spot and reappearing from nowhere in another).
-        //
-        // Same constant "gravity" throughout — duration scales with sqrt of
-        // the DISTANCE the slab's centre has to travel, not with how much
-        // sand there is. A slab that already fills most of the bulb barely
-        // has to move (both its ends are already close to their targets);
-        // a thin sliver has to cross almost the whole bulb to reach the
-        // opposite end. Distance (in frontFrac units) is (1 - width).
+        // A fixed-width slab of sand slides rigidly from one extreme of the bulb to the
+        // opposite extreme — both ends move by the same lerp so the width never changes
+        // (no gap opening mid-slide). Duration scales with sqrt of the distance the
+        // slab's centre travels (1 - width), not with how much sand there is.
         _startPourTransfer(bulbKey, oldRole, oldFrontFrac) {
             const bulb = this.bulbs[bulbKey];
             const newRole = oldRole === 'drain' ? 'fill' : 'drain';
@@ -700,10 +612,7 @@
             this._ensurePourLoopRunning();
         }
 
-        // Renders the sand between two frontFrac bounds (0=rim,1=neck)
-        // as one plain contiguous region — used only for the sliding
-        // transfer slab, which doesn't need the dip/peak surface bump
-        // that the live drain/fill rendering has.
+        // Plain contiguous sand region between two frontFrac bounds — used only for the sliding transfer slab (no dip/peak bump).
         _bulbSlabD(bulb, loFrontFrac, hiFrontFrac) {
             const yAtLo = this._frontY(bulb, clamp(loFrontFrac, 0, 1));
             const yAtHi = this._frontY(bulb, clamp(hiFrontFrac, 0, 1));
@@ -717,10 +626,7 @@
                 + pointsToLineSegments(leftPoints) + ' Z';
         }
 
-        // A single shared rAF loop drives every active pour transfer (there
-        // are normally two at once, one per bulb, each with its own
-        // duration) so we don't spin up a separate requestAnimationFrame
-        // per transfer.
+        // One shared rAF loop drives every active pour transfer instead of one requestAnimationFrame per transfer.
         _ensurePourLoopRunning() {
             if (this._pourRafId) return;
             const step = (now) => {
@@ -767,9 +673,7 @@
             this._stepParticles(Math.min(dt, MAX_PARTICLE_FRAME_MS));
             this._notifyTick();
 
-            // once time's up, keep animating (no new grains spawn — the
-            // stream/flowing checks already key off elapsedMs<durationMs)
-            // until every grain still in the air has landed, then finish
+            // once time's up, keep animating until every grain in the air has landed, then finish
             if (this.elapsedMs >= this.durationMs && this.particles.length === 0) {
                 this.running = false;
                 this._done = true;

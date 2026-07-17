@@ -1,9 +1,5 @@
 /* ============================================================
    embed/embed.js — minimal widget wiring: hourglass + time only.
-   Shares the timer engine (js/hourglass.js) and the ?minutes=&
-   autostart= param contract (js/shared.js) with the full app —
-   see js/app.js for the presets/input/toggle/keyboard shortcuts
-   this intentionally omits.
    ============================================================ */
 
 (function () {
@@ -15,9 +11,7 @@
 
     const params = new URLSearchParams(window.location.search);
 
-    // ?theme=light for embedding on a light host page — only the time
-    // text's color changes (see css/embed.css), the hourglass itself
-    // stays the same on either theme.
+    // ?theme=light for a light host page — only the time text's color changes (see css/embed.css).
     if (params.get('theme') === 'light') {
         document.body.dataset.theme = 'light';
     }

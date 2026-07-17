@@ -1,7 +1,5 @@
 /* ============================================================
-   js/shared.js — helpers shared between the full app (js/app.js)
-   and the embeddable widget (embed/embed.js), so the ?minutes=&
-   autostart= param contract can't drift between the two.
+   js/shared.js — helpers shared between js/app.js and embed/embed.js.
    ============================================================ */
 
 (function () {
@@ -18,9 +16,7 @@
         return Math.max(1, Math.min(180, Math.round(minutes)));
     }
 
-    // Hard cap on how many hourglasses can share a row — also doubles as
-    // the upper bound for the h1_/h2_/h3_ indexed URL params below, so the
-    // two can never silently drift apart.
+    // Hard cap on cards per row — also the bound for the h1_/h2_/h3_ URL params below.
     const MAX_CARDS = 3;
 
     function readTimerParams(search) {
@@ -32,11 +28,7 @@
         return { minutes, autostart };
     }
 
-    // How much smaller/bigger a card's hourglass renders based on its
-    // duration, relative to a 60-minute reference. Deliberately damped
-    // (sqrt, plus a high floor) so a 5-minute glass reads as clearly
-    // shorter than a 25-minute one without looking like a toy next to it —
-    // proportion should be *felt*, not literal (5 min isn't 1/5 the size).
+    // Damped size scaling (sqrt + high floor) — proportion should be felt, not literal.
     const SIZE_SCALE_REFERENCE_MINUTES = 60;
     const SIZE_SCALE_MIN = 0.55;
     const SIZE_SCALE_MAX = 1.15;
@@ -47,12 +39,7 @@
         return Math.max(SIZE_SCALE_MIN, Math.min(SIZE_SCALE_MAX, raw));
     }
 
-    // Curated sand colors, selectable per hourglass. Each entry resolves to
-    // the same three CSS custom properties the SVG gradients already read
-    // (--color-sand / -light / -dark), just scoped to one card instead of
-    // :root. "amber" keeps the exact original hex triplet so the default
-    // look never shifts; every other entry is derived from a single hue so
-    // they all share the same saturation/lightness "feel" as amber.
+    // Curated sand colors. "amber" keeps the original hex triplet as the default; the rest are derived from a single hue each.
     const COLOR_PALETTE = [
         { id: 'amber', name: 'Amber', sand: '#e0a83f', light: '#f3cf7c', dark: '#a86f24' },
         { id: 'ember', name: 'Ember', hue: 8 },
@@ -64,9 +51,7 @@
         { id: 'slate', name: 'Slate', hue: 218, sat: 22 },
     ];
 
-    // Fixed colors for the Pomodoro preset: warm red for the focus session,
-    // green for the break — the classic pairing, independent of whatever
-    // order COLOR_PALETTE happens to list its entries in.
+    // Fixed Pomodoro colors: warm red for focus, green for break.
     const POMODORO_FOCUS_COLOR_ID = 'ember';
     const POMODORO_BREAK_COLOR_ID = 'emerald';
 
@@ -81,19 +66,10 @@
         };
     }
 
-    // Predefined per-hourglass done sounds. Only sounds/done.mp3 exists in
-    // the repo today; done2/done3 are referenced ahead of time (paths a
-    // future asset drop can fill in) — playSound() already swallows a 404
-    // via the same .catch(() => {}) as a blocked autoplay, so picking an
-    // as-yet-missing sound just stays silent instead of erroring.
     const SOUND_IDS = ['done', 'done2', 'done3'];
     const DEFAULT_SOUND_ID = 'done';
 
-    // document.currentScript is only valid while this script first runs
-    // synchronously — captured once, up front, since soundUrl() below is
-    // called later from click/timer handlers, long after that's gone null.
-    // Resolved relative to this script's own file, not the page — index.html
-    // and embed/index.html live in different folders.
+    // Captured now — document.currentScript is null once called later from click/timer handlers.
     const SCRIPT_URL = document.currentScript.src;
 
     function soundUrl(soundId) {
@@ -130,17 +106,9 @@
         return raw ? raw.slice(0, 16) : '';
     }
 
-    // The full hourglass-row configuration, read from the URL: either the
-    // indexed h1_/h2_/h3_ multi-card format, or — falling back for links
-    // written before multiple hourglasses existed — the original flat
-    // single-card ?minutes=&autostart= contract, now also accepting the
-    // same optional &color=&sound=&label= any single link can carry. A
-    // missing/invalid color or sound comes back as null, meaning "let the
-    // row auto-pick one" rather than forcing everyone onto the same
-    // default — same as clicking Add with nothing customized yet.
-    //
-    // ?auto=1 (automatic mode) is orthogonal to all of the above and
-    // applies whichever format matched.
+    // Row config from the URL: indexed h1_/h2_/h3_ form, or the flat legacy
+    // single-card ?minutes=&autostart=&color=&sound=&label= as a fallback.
+    // A missing/invalid color or sound comes back null, meaning auto-pick.
     function readCardsFromParams(search) {
         const urlParams = new URLSearchParams(search);
         const autoParam = urlParams.get('auto');
