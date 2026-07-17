@@ -35,6 +35,17 @@ test('reset returns to the full duration', async ({ page }) => {
     await expect(card.locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start');
 });
 
+test('the tab title mirrors the running countdown and reverts to plain "Hourglass" when idle', async ({ page }) => {
+    await expect(page).toHaveTitle('Hourglass');
+
+    const card = page.locator('.hourglass-card:not(.hourglass-card--add)').first();
+    await card.locator('[data-action="toggle"]').click();
+    await expect(page).toHaveTitle(/^\d{2}:\d{2} - Hourglass$/);
+
+    await card.locator('[data-action="reset"]').click();
+    await expect(page).toHaveTitle('Hourglass');
+});
+
 test('clicking the hourglass flips it and commits to running', async ({ page }) => {
     const card = page.locator('.hourglass-card:not(.hourglass-card--add)').first();
     await card.locator('.hourglass-shell').click();

@@ -23,6 +23,8 @@ test('automatic mode: play on a card starts the sequence, pause/resume/reset beh
 
     await focus.locator('[data-action="toggle"]').click();
     await expect(focus).toHaveClass(/is-sequence-active/);
+    // tab title picks up the active sequence card's label, not just the raw countdown
+    await expect(page).toHaveTitle(/^Focus \d{2}:\d{2} - Hourglass$/);
 
     // edit/remove are locked on every card while a sequence is running
     await expect(focus.locator('[data-action="edit"]')).toBeDisabled();

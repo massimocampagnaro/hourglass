@@ -24,6 +24,8 @@
     const REMOVE_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     const ADD_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
+    const BASE_TITLE = document.title; // "Hourglass" — captured before this module ever touches it
+
     let nextCardUid = 0;
 
     function pickDefaultColorId(existingColorIds) {
@@ -292,6 +294,7 @@
         function wireGlassCallbacks(card) {
             card.glass.onTick = (remainingMs) => {
                 card.timeEl.textContent = formatTime(remainingMs);
+                syncDocumentTitle();
             };
             card.glass.onDone = () => {
                 card.timeEl.classList.add('is-done');
@@ -577,6 +580,24 @@
             refreshUI();
         }
 
+        // Tab title mirrors whichever card is most worth glancing at from another tab: the active
+        // sequence card in automatic mode, or — in manual mode, where several can run at once —
+        // whichever is soonest to finish. Falls back to the plain title when nothing is running.
+        function syncDocumentTitle() {
+            let soonest = null;
+            if (autoMode && sequence.active && cards[sequence.index]) {
+                soonest = cards[sequence.index];
+            } else {
+                cards.forEach((card) => {
+                    if (!card.glass.running) return;
+                    if (!soonest || card.glass.getRemainingMs() < soonest.glass.getRemainingMs()) soonest = card;
+                });
+            }
+            document.title = soonest
+                ? `${soonest.label ? soonest.label + ' ' : ''}${formatTime(soonest.glass.getRemainingMs())} - ${BASE_TITLE}`
+                : BASE_TITLE;
+        }
+
         // ─── UI refresh ──────────────────────────────────────
         function refreshUI() {
             const configActive = configuringId != null;
@@ -598,6 +619,7 @@
             addBtnEl.setAttribute('aria-disabled', String(configActive || sequence.active));
             rowEl.classList.toggle('is-at-max', atMax);
             rowEl.classList.toggle('is-sequence-running', sequence.active);
+            syncDocumentTitle();
             onChange(); // notify the host page after every state change
         }
 
