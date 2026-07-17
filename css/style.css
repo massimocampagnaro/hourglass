@@ -618,14 +618,29 @@ body {
     left: var(--sp-4);
 }
 
-.corner-link--right {
+.corner-actions--right {
+    position: fixed;
+    top: var(--sp-4);
     right: var(--sp-4);
+    z-index: 10;
+    display: flex;
+    gap: var(--sp-2);
 }
 
+.corner-actions--right .corner-link {
+    position: static;
+}
+
+#shareBtn,
 #muteBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+#shareBtn[data-copied="true"] {
+    color: var(--color-accent);
+    border-color: var(--color-accent-dim);
 }
 
 #muteBtn[aria-pressed="true"] {

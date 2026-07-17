@@ -1,17 +1,20 @@
 // The URL mirrors the row's state (js/app.js syncUrl), so a copied link restores it.
 const { test, expect } = require('@playwright/test');
 
-test('default load produces a minimal, backward-compatible URL', async ({ page }) => {
+test('default load produces a minimal, packed URL', async ({ page }) => {
     await page.goto('/index.html');
     const url = new URL(page.url());
-    expect(url.searchParams.get('minutes')).toBe('5');
-    // untouched defaults (amber, sound 1, no label) stay omitted
-    expect(url.searchParams.has('color')).toBe(false);
-    expect(url.searchParams.has('sound')).toBe(false);
-    expect(url.searchParams.has('label')).toBe(false);
+    expect(url.searchParams.has('p')).toBe(true);
+    // the app only ever writes the packed param now — no more verbose minutes=/color=/etc.
+    expect(url.searchParams.has('minutes')).toBe(false);
+
+    const decoded = await page.evaluate(
+        (search) => window.HourglassLinkCodec.readCardsFromSearch(search), url.search);
+    expect(decoded.cards).toHaveLength(1);
+    expect(decoded.cards[0].minutes).toBe(5);
 });
 
-test('customizing the single card updates the URL, and reloading it restores the config', async ({ page }) => {
+test('customizing the single card updates the packed URL, and reloading it restores the config', async ({ page }) => {
     await page.goto('/index.html');
     const card = page.locator('.hourglass-card:not(.hourglass-card--add)').first();
     await card.locator('[data-action="edit"]').click();
@@ -21,15 +24,35 @@ test('customizing the single card updates the URL, and reloading it restores the
     await page.locator('.hourglass-card.is-configuring [data-action="save"]').click();
 
     const url = new URL(page.url());
-    expect(url.searchParams.get('color')).toBe('azure');
-    expect(url.searchParams.get('sound')).toBe('done2');
-    expect(url.searchParams.get('label')).toBe('Deep Work');
+    const decoded = await page.evaluate(
+        (search) => window.HourglassLinkCodec.readCardsFromSearch(search), url.search);
+    expect(decoded.cards[0].colorId).toBe('azure');
+    expect(decoded.cards[0].soundId).toBe('done2');
+    expect(decoded.cards[0].label).toBe('Deep Work');
 
     await page.goto(page.url());
     await expect(page.locator('.card-label')).toHaveText('Deep Work');
     const restoredColor = await page.locator('.hourglass-card:not(.hourglass-card--add)').first()
         .evaluate((el) => getComputedStyle(el).getPropertyValue('--color-sand').trim());
     expect(restoredColor).toContain('205'); // azure's hue
+});
+
+test('a multi-card row packs into a much shorter URL and round-trips through a reload', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.locator('.hourglass-card--add').click();
+    await page.locator('.hourglass-card.is-configuring .duration-input').fill('45');
+    await page.locator('.hourglass-card.is-configuring .card-label-input').fill('Reading time');
+    await page.locator('.hourglass-card.is-configuring [data-action="save"]').click();
+
+    const packedUrl = page.url();
+    // sanity: shorter than the old indexed h1_/h2_ contract would have produced for the same row
+    expect(new URL(packedUrl).search.length).toBeLessThan(60);
+
+    await page.goto(packedUrl);
+    const cards = page.locator('.hourglass-card:not(.hourglass-card--add)');
+    await expect(cards).toHaveCount(2);
+    await expect(cards.nth(1).locator('.time-readout')).toHaveText('45:00');
+    await expect(cards.nth(1).locator('.card-label')).toHaveText('Reading time');
 });
 
 test('legacy ?minutes=&autostart= links still work unchanged', async ({ page }) => {
@@ -75,5 +98,35 @@ test('garbage/invalid param values fall back gracefully instead of erroring', as
 
     await page.goto('/index.html?minutes=5&color=not-a-real-color&sound=not-a-real-sound&h1_minutes=not-a-number');
     await expect(page.locator('.hourglass-card:not(.hourglass-card--add)')).toHaveCount(1);
+    expect(errors).toEqual([]);
+});
+
+test('buildVerboseSearchParams still round-trips through readCardsFromParams (kept for embedding/hand-written links)', async ({ page }) => {
+    await page.goto('/index.html');
+    const result = await page.evaluate(() => {
+        const cards = [
+            { minutes: 45, colorId: 'azure', soundId: 'done2', label: 'Reading', running: false },
+            { minutes: 10, colorId: 'emerald', soundId: 'done', label: '', running: false },
+        ];
+        const search = '?' + window.HourglassShared.buildVerboseSearchParams(cards, true).toString();
+        return { search, decoded: window.HourglassShared.readCardsFromParams(search) };
+    });
+    expect(result.search).toContain('h1_minutes=45');
+    expect(result.search).toContain('auto=1');
+    expect(result.decoded.autoMode).toBe(true);
+    expect(result.decoded.cards).toEqual([
+        { minutes: 45, colorId: 'azure', soundId: 'done2', label: 'Reading', running: false },
+        { minutes: 10, colorId: 'emerald', soundId: 'done', label: '', running: false },
+    ]);
+});
+
+test('a corrupted packed ?p= value falls back to the default card instead of erroring', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/index.html?p=garbage-not-a-real-token');
+    await expect(page.locator('.hourglass-card:not(.hourglass-card--add)')).toHaveCount(1);
+    await expect(page.locator('.hourglass-card:not(.hourglass-card--add)').first().locator('.time-readout'))
+        .toHaveText('05:00');
     expect(errors).toEqual([]);
 });

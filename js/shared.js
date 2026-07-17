@@ -149,11 +149,37 @@
         };
     }
 
+    // Inverse of readCardsFromParams above. Unused by the app itself (syncUrl writes the packed
+    // ?p= format instead) — kept for anything that wants an explicit, hand-editable link.
+    function buildVerboseSearchParams(cards, autoMode) {
+        const params = new URLSearchParams();
+        if (autoMode) params.set('auto', '1');
+
+        if (cards.length === 1) {
+            const card = cards[0];
+            params.set('minutes', String(clampMinutes(card.minutes)));
+            if (card.colorId && card.colorId !== COLOR_PALETTE[0].id) params.set('color', card.colorId);
+            if (card.soundId && card.soundId !== DEFAULT_SOUND_ID) params.set('sound', card.soundId);
+            if (card.label) params.set('label', sanitizeLabel(card.label));
+            if (card.running) params.set('autostart', '1');
+        } else {
+            cards.slice(0, MAX_CARDS).forEach((card, i) => {
+                const prefix = `h${i + 1}_`;
+                params.set(prefix + 'minutes', String(clampMinutes(card.minutes)));
+                params.set(prefix + 'color', card.colorId);
+                params.set(prefix + 'sound', card.soundId);
+                if (card.label) params.set(prefix + 'label', sanitizeLabel(card.label));
+            });
+        }
+        return params;
+    }
+
     window.HourglassShared = {
         formatTime, clampMinutes, readTimerParams, playDoneSound,
         sizeScaleForMinutes, MAX_CARDS,
         COLOR_PALETTE, resolveColor, POMODORO_FOCUS_COLOR_ID, POMODORO_BREAK_COLOR_ID,
         SOUND_IDS, DEFAULT_SOUND_ID, playSound,
-        readCardsFromParams,
+        isValidColorId, isValidSoundId, sanitizeLabel,
+        readCardsFromParams, buildVerboseSearchParams,
     };
 })();

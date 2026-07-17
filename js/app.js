@@ -8,6 +8,7 @@
 
     const rowEl = document.getElementById('hourglassRow');
     const popOutBtn = document.getElementById('popOutBtn');
+    const shareBtn = document.getElementById('shareBtn');
     const muteBtn = document.getElementById('muteBtn');
     const physicalFlipToggle = document.getElementById('physicalFlipToggle');
     const pomodoroBtn = document.getElementById('pomodoroBtn');
@@ -65,6 +66,31 @@
     }
     syncMuteButton();
 
+    const SHARE_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">'
+        + '<line x1="6" y1="12" x2="18" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+        + '<line x1="6" y1="12" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+        + '<circle cx="6" cy="12" r="2.6" fill="currentColor"/><circle cx="18" cy="6" r="2.6" fill="currentColor"/>'
+        + '<circle cx="18" cy="18" r="2.6" fill="currentColor"/></svg>';
+    const SHARE_COPIED_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">'
+        + '<path d="M5 13l4 4L19 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const SHARE_FEEDBACK_MS = 1600;
+
+    shareBtn.innerHTML = SHARE_SVG;
+    let shareFeedbackTimeoutId = null;
+
+    function flashShareCopied() {
+        shareBtn.innerHTML = SHARE_COPIED_SVG;
+        shareBtn.dataset.copied = 'true';
+        shareBtn.setAttribute('aria-label', 'Link copied');
+        if (shareFeedbackTimeoutId) clearTimeout(shareFeedbackTimeoutId);
+        shareFeedbackTimeoutId = setTimeout(() => {
+            shareBtn.innerHTML = SHARE_SVG;
+            delete shareBtn.dataset.copied;
+            shareBtn.setAttribute('aria-label', 'Copy shareable link');
+            shareFeedbackTimeoutId = null;
+        }, SHARE_FEEDBACK_MS);
+    }
+
     // Automatic mode needs 2+ cards; cardManager already refuses to turn it on with one — this just hides the toggle to match.
     function syncAutoModeVisibility() {
         autoModeRow.hidden = cardManager.getCardCount() <= 1;
@@ -85,6 +111,27 @@
         saveMutedPreference(muted);
         syncMuteButton();
         cardManager.setMuted(muted);
+    });
+
+    // Native share sheet where available (mostly mobile); otherwise copy the link to the clipboard.
+    // The address bar already holds the packed ?p= link (syncUrl), so this is always shareable as-is.
+    shareBtn.addEventListener('click', async () => {
+        const url = window.location.href;
+        if (navigator.share) {
+            try {
+                await navigator.share({ url, title: document.title });
+                return;
+            } catch (err) {
+                if (err && err.name === 'AbortError') return; // user dismissed the native sheet — leave it at that
+                // any other failure (e.g. unsupported) — fall through and try the clipboard instead
+            }
+        }
+        try {
+            await navigator.clipboard.writeText(url);
+            flashShareCopied();
+        } catch {
+            // clipboard blocked (permissions, insecure context) — nothing more we can do silently
+        }
     });
 
     physicalFlipToggle.addEventListener('change', () => {
@@ -117,30 +164,12 @@
         document.documentElement.classList.add('is-popout'); // sized to fit exactly, no scrollbar needed
     }
 
-    // Mirrors the row into the URL — flat contract for one card (defaults omitted), indexed h1_/h2_/h3_ for more. See readCardsFromParams.
-    const DEFAULT_COLOR_ID = HourglassShared.COLOR_PALETTE[0].id;
-
+    // Mirrors the row into the URL as the compact `p=` format (see js/link-codec.js) — the
+    // verbose flat/indexed contract in js/shared.js still reads fine, it's just no longer written.
     function syncUrl() {
         const cards = cardManager.getCardsSnapshot();
         const params = new URLSearchParams();
-        if (cardManager.isAutoMode()) params.set('auto', '1');
-
-        if (cards.length === 1) {
-            const card = cards[0];
-            params.set('minutes', String(card.minutes));
-            if (card.colorId !== DEFAULT_COLOR_ID) params.set('color', card.colorId);
-            if (card.soundId !== HourglassShared.DEFAULT_SOUND_ID) params.set('sound', card.soundId);
-            if (card.label) params.set('label', card.label);
-            if (card.running) params.set('autostart', '1');
-        } else {
-            cards.forEach((card, i) => {
-                const prefix = `h${i + 1}_`;
-                params.set(prefix + 'minutes', String(card.minutes));
-                params.set(prefix + 'color', card.colorId);
-                params.set(prefix + 'sound', card.soundId);
-                if (card.label) params.set(prefix + 'label', card.label);
-            });
-        }
+        params.set(HourglassLinkCodec.LINK_PARAM, HourglassLinkCodec.encodeLinkParam(cards, cardManager.isAutoMode()));
         history.replaceState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
     }
 
@@ -165,9 +194,9 @@
         }
     });
 
-    // e.g. ?minutes=25&color=ember or ?h1_minutes=25&h1_label=Focus&h2_minutes=5&h2_label=Break&auto=1
+    // e.g. ?p=10-130ea (compact) or ?minutes=25&color=ember or ?h1_minutes=25&h1_label=Focus&h2_minutes=5&h2_label=Break&auto=1
     const { cards: initialCardConfigs, autoMode: initialAutoMode } =
-        HourglassShared.readCardsFromParams(window.location.search);
+        HourglassLinkCodec.readCardsFromSearch(window.location.search);
     cardManager.addCardsFromConfigs(initialCardConfigs);
     if (initialAutoMode) {
         cardManager.setAutoMode(true);

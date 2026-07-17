@@ -710,11 +710,11 @@
 
             const focus = {
                 id: 'c' + (nextCardUid++), minutes: 25,
-                colorId: POMODORO_FOCUS_COLOR_ID, soundId: 'done2', label: 'Focus', isNew: false,
+                colorId: POMODORO_FOCUS_COLOR_ID, soundId: 'done', label: 'Focus', isNew: false,
             };
             const brk = {
                 id: 'c' + (nextCardUid++), minutes: 5,
-                colorId: POMODORO_BREAK_COLOR_ID, soundId: 'done3', label: 'Break', isNew: false,
+                colorId: POMODORO_BREAK_COLOR_ID, soundId: 'done2', label: 'Break', isNew: false,
             };
             [focus, brk].forEach((card) => {
                 cards.push(card);
