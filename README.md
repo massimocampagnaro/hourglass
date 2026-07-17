@@ -24,6 +24,10 @@ Turn automatic mode off and every card goes back to behaving independently, exac
 
 The address bar always mirrors the current row, so copying it hands over a link that opens back up exactly as configured — no separate "share" button needed.
 
+What actually ends up in the address bar is a single packed `?p=` param — a short positional encoding of every card's duration/color/sound/label plus automatic mode, instead of one query param per field. It's opaque by design (not meant to be hand-edited) but keeps shared links short even with three fully customized hourglasses.
+
+For hand-written or bookmarked links, the verbose param contract below still works exactly as documented — the app reads either form, it just no longer writes the verbose one itself.
+
 With a single hourglass, it stays the same flat, minimal contract as before (and any old link from before Phase 2 still works), plus three new optional params:
 
 - `minutes`: starting duration in minutes, 1–180 (default 5)

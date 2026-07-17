@@ -117,30 +117,12 @@
         document.documentElement.classList.add('is-popout'); // sized to fit exactly, no scrollbar needed
     }
 
-    // Mirrors the row into the URL — flat contract for one card (defaults omitted), indexed h1_/h2_/h3_ for more. See readCardsFromParams.
-    const DEFAULT_COLOR_ID = HourglassShared.COLOR_PALETTE[0].id;
-
+    // Mirrors the row into the URL as the compact `p=` format (see js/link-codec.js) — the
+    // verbose flat/indexed contract in js/shared.js still reads fine, it's just no longer written.
     function syncUrl() {
         const cards = cardManager.getCardsSnapshot();
         const params = new URLSearchParams();
-        if (cardManager.isAutoMode()) params.set('auto', '1');
-
-        if (cards.length === 1) {
-            const card = cards[0];
-            params.set('minutes', String(card.minutes));
-            if (card.colorId !== DEFAULT_COLOR_ID) params.set('color', card.colorId);
-            if (card.soundId !== HourglassShared.DEFAULT_SOUND_ID) params.set('sound', card.soundId);
-            if (card.label) params.set('label', card.label);
-            if (card.running) params.set('autostart', '1');
-        } else {
-            cards.forEach((card, i) => {
-                const prefix = `h${i + 1}_`;
-                params.set(prefix + 'minutes', String(card.minutes));
-                params.set(prefix + 'color', card.colorId);
-                params.set(prefix + 'sound', card.soundId);
-                if (card.label) params.set(prefix + 'label', card.label);
-            });
-        }
+        params.set(HourglassLinkCodec.LINK_PARAM, HourglassLinkCodec.encodeLinkParam(cards, cardManager.isAutoMode()));
         history.replaceState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
     }
 
@@ -165,9 +147,9 @@
         }
     });
 
-    // e.g. ?minutes=25&color=ember or ?h1_minutes=25&h1_label=Focus&h2_minutes=5&h2_label=Break&auto=1
+    // e.g. ?p=10-130ea (compact) or ?minutes=25&color=ember or ?h1_minutes=25&h1_label=Focus&h2_minutes=5&h2_label=Break&auto=1
     const { cards: initialCardConfigs, autoMode: initialAutoMode } =
-        HourglassShared.readCardsFromParams(window.location.search);
+        HourglassLinkCodec.readCardsFromSearch(window.location.search);
     cardManager.addCardsFromConfigs(initialCardConfigs);
     if (initialAutoMode) {
         cardManager.setAutoMode(true);
