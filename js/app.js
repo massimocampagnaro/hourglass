@@ -72,19 +72,10 @@
     }
     syncMuteButton();
 
-    // A popped-out window only ever mirrors a single, URL-driven hourglass
-    // (see syncUrl below) — once a second card exists (manually, or via the
-    // Pomodoro preset) there's no single state left to mirror, so the
-    // button is hidden rather than popping out something misleading.
-    function syncPopoutVisibility() {
-        popOutBtn.hidden = cardManager.getCardCount() !== 1;
-    }
-
     const cardManager = HourglassCards.createCardManager(rowEl, {
         muted,
         resetOnFlip,
         onChange: () => {
-            syncPopoutVisibility();
             autoModeToggle.checked = cardManager.isAutoMode();
             syncUrl();
         },
@@ -106,7 +97,6 @@
     pomodoroBtn.addEventListener('click', () => {
         cardManager.applyPomodoroPreset();
         autoModeToggle.checked = true;
-        syncPopoutVisibility();
     });
 
     autoModeToggle.addEventListener('change', () => {
@@ -128,17 +118,36 @@
         document.documentElement.classList.add('is-popout'); // sized to fit exactly, no scrollbar needed
     }
 
-    // Mirrors the lone default card's minutes/running state into the address
-    // bar so the page can be bookmarked or shared as-is, exactly like Phase
-    // 1. Once a second card exists there's no single state left to encode,
-    // so the URL is simply left alone from that point on.
+    // Mirrors the whole row into the address bar so the page can be
+    // bookmarked or shared as-is — one hourglass keeps the original flat
+    // ?minutes=&autostart= contract (plus the new &color=&sound=&label=,
+    // each omitted when it's just the default so an untouched single
+    // card still produces the same minimal URL as before); two or three
+    // use the indexed h1_/h2_/h3_ form. See HourglassShared.readCardsFromParams
+    // for the matching read side.
+    const DEFAULT_COLOR_ID = HourglassShared.COLOR_PALETTE[0].id;
+
     function syncUrl() {
-        if (cardManager.getCardCount() !== 1) return;
-        const card = cardManager.getFocusedCard();
-        if (!card) return;
+        const cards = cardManager.getCardsSnapshot();
         const params = new URLSearchParams();
-        params.set('minutes', String(card.minutes));
-        if (card.glass.running) params.set('autostart', '1');
+        if (cardManager.isAutoMode()) params.set('auto', '1');
+
+        if (cards.length === 1) {
+            const card = cards[0];
+            params.set('minutes', String(card.minutes));
+            if (card.colorId !== DEFAULT_COLOR_ID) params.set('color', card.colorId);
+            if (card.soundId !== HourglassShared.DEFAULT_SOUND_ID) params.set('sound', card.soundId);
+            if (card.label) params.set('label', card.label);
+            if (card.running) params.set('autostart', '1');
+        } else {
+            cards.forEach((card, i) => {
+                const prefix = `h${i + 1}_`;
+                params.set(prefix + 'minutes', String(card.minutes));
+                params.set(prefix + 'color', card.colorId);
+                params.set(prefix + 'sound', card.soundId);
+                if (card.label) params.set(prefix + 'label', card.label);
+            });
+        }
         history.replaceState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
     }
 
@@ -166,13 +175,19 @@
         }
     });
 
-    // Optional query params so a timer can be shared/bookmarked pre-configured,
-    // e.g. link.html?minutes=25&autostart=1 for a one-tap Pomodoro start.
-    // Both are independent and optional — omitting either just falls back
-    // to the normal default (5 min, not running). Shared with embed/embed.js
-    // so the two entry points read the same contract.
-    const { minutes: initialMinutes, autostart } = HourglassShared.readTimerParams(window.location.search);
-    cardManager.addDefaultCard(initialMinutes, autostart);
-    syncPopoutVisibility();
+    // Optional query params so the whole row can be shared/bookmarked
+    // pre-configured, e.g. link.html?minutes=25&autostart=1&color=ember
+    // for a one-tap custom start, or link.html?h1_minutes=25&h1_label=Focus
+    // &h2_minutes=5&h2_label=Break&auto=1 for a from-scratch Pomodoro link.
+    // See HourglassShared.readCardsFromParams for the full contract —
+    // shared with embed/embed.js only for the ?minutes=&autostart= part,
+    // so the two entry points can't drift apart on that shared subset.
+    const { cards: initialCardConfigs, autoMode: initialAutoMode } =
+        HourglassShared.readCardsFromParams(window.location.search);
+    cardManager.addCardsFromConfigs(initialCardConfigs);
+    if (initialAutoMode) {
+        cardManager.setAutoMode(true);
+        autoModeToggle.checked = true;
+    }
     syncUrl();
 })();

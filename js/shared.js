@@ -18,6 +18,11 @@
         return Math.max(1, Math.min(180, Math.round(minutes)));
     }
 
+    // Hard cap on how many hourglasses can share a row — also doubles as
+    // the upper bound for the h1_/h2_/h3_ indexed URL params below, so the
+    // two can never silently drift apart.
+    const MAX_CARDS = 3;
+
     function readTimerParams(search) {
         const urlParams = new URLSearchParams(search);
         const minutesParam = parseInt(urlParams.get('minutes'), 10);
@@ -113,10 +118,74 @@
         playSound(DEFAULT_SOUND_ID);
     }
 
+    function isValidColorId(id) {
+        return COLOR_PALETTE.some((c) => c.id === id);
+    }
+
+    function isValidSoundId(id) {
+        return SOUND_IDS.includes(id);
+    }
+
+    function sanitizeLabel(raw) {
+        return raw ? raw.slice(0, 16) : '';
+    }
+
+    // The full hourglass-row configuration, read from the URL: either the
+    // indexed h1_/h2_/h3_ multi-card format, or — falling back for links
+    // written before multiple hourglasses existed — the original flat
+    // single-card ?minutes=&autostart= contract, now also accepting the
+    // same optional &color=&sound=&label= any single link can carry. A
+    // missing/invalid color or sound comes back as null, meaning "let the
+    // row auto-pick one" rather than forcing everyone onto the same
+    // default — same as clicking Add with nothing customized yet.
+    //
+    // ?auto=1 (automatic mode) is orthogonal to all of the above and
+    // applies whichever format matched.
+    function readCardsFromParams(search) {
+        const urlParams = new URLSearchParams(search);
+        const autoParam = urlParams.get('auto');
+        const autoMode = autoParam === '1' || autoParam === 'true';
+
+        const indexedCards = [];
+        for (let n = 1; n <= MAX_CARDS; n++) {
+            const prefix = `h${n}_`;
+            const hasAny = ['minutes', 'color', 'sound', 'label'].some((key) => urlParams.has(prefix + key));
+            if (!hasAny) continue;
+            const minutesParam = parseInt(urlParams.get(prefix + 'minutes'), 10);
+            const colorParam = urlParams.get(prefix + 'color');
+            const soundParam = urlParams.get(prefix + 'sound');
+            indexedCards.push({
+                minutes: clampMinutes(Number.isFinite(minutesParam) ? minutesParam : 5),
+                colorId: isValidColorId(colorParam) ? colorParam : null,
+                soundId: isValidSoundId(soundParam) ? soundParam : null,
+                label: sanitizeLabel(urlParams.get(prefix + 'label')),
+                running: false, // no auto-start concept for multi-card links — see README
+            });
+        }
+        if (indexedCards.length > 0) {
+            return { cards: indexedCards, autoMode };
+        }
+
+        const { minutes, autostart } = readTimerParams(search);
+        const colorParam = urlParams.get('color');
+        const soundParam = urlParams.get('sound');
+        return {
+            cards: [{
+                minutes,
+                colorId: isValidColorId(colorParam) ? colorParam : null,
+                soundId: isValidSoundId(soundParam) ? soundParam : null,
+                label: sanitizeLabel(urlParams.get('label')),
+                running: autostart,
+            }],
+            autoMode,
+        };
+    }
+
     window.HourglassShared = {
         formatTime, clampMinutes, readTimerParams, playDoneSound,
-        sizeScaleForMinutes,
+        sizeScaleForMinutes, MAX_CARDS,
         COLOR_PALETTE, resolveColor, POMODORO_FOCUS_COLOR_ID, POMODORO_BREAK_COLOR_ID,
         SOUND_IDS, DEFAULT_SOUND_ID, playSound,
+        readCardsFromParams,
     };
 })();

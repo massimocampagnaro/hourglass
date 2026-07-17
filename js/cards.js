@@ -14,12 +14,11 @@
     'use strict';
 
     const {
-        clampMinutes, formatTime, sizeScaleForMinutes,
+        clampMinutes, formatTime, sizeScaleForMinutes, MAX_CARDS,
         COLOR_PALETTE, resolveColor, POMODORO_FOCUS_COLOR_ID, POMODORO_BREAK_COLOR_ID,
-        SOUND_IDS, DEFAULT_SOUND_ID, playSound,
+        SOUND_IDS, playSound,
     } = window.HourglassShared;
 
-    const MAX_CARDS = 3;
     const PRESET_MINUTES = [5, 25, 30, 60];
 
     // Base "scale 1.0" ceiling, in px, before a card's own duration-based
@@ -674,21 +673,42 @@
             return cards[0] || null;
         }
 
-        function addDefaultCard(minutes, autostart) {
-            const card = {
-                id: 'c' + (nextCardUid++),
-                minutes: clampMinutes(minutes),
-                colorId: COLOR_PALETTE[0].id,
-                soundId: DEFAULT_SOUND_ID,
-                label: '',
-                isNew: false,
-            };
-            cards.push(card);
-            buildCardDom(card);
+        // Bootstraps the row from parsed URL config (see
+        // HourglassShared.readCardsFromParams) — one entry for the legacy
+        // single-card link format, up to MAX_CARDS for the indexed
+        // h1_/h2_/h3_ one. A null colorId/soundId in a config auto-picks
+        // the same "first not already in use" default the Add button
+        // does, so a link that only specifies minutes for two cards still
+        // gets them visually distinct instead of both defaulting to amber.
+        function addCardsFromConfigs(configs) {
+            configs.slice(0, MAX_CARDS).forEach((cfg) => {
+                const card = {
+                    id: 'c' + (nextCardUid++),
+                    minutes: clampMinutes(cfg.minutes),
+                    colorId: cfg.colorId || pickDefaultColorId(cards.map((c) => c.colorId)),
+                    soundId: cfg.soundId || pickDefaultSoundId(cards.map((c) => c.soundId)),
+                    label: cfg.label || '',
+                    isNew: false,
+                };
+                cards.push(card);
+                buildCardDom(card);
+                if (cfg.running) card.glass.start();
+            });
             updateRowLayout();
-            if (autostart) card.glass.start();
             refreshUI();
-            return card;
+        }
+
+        // Current row state, in display order — used to mirror it back
+        // into the URL (see js/app.js syncUrl) so a copied link restores
+        // the same setup.
+        function getCardsSnapshot() {
+            return cards.map((c) => ({
+                minutes: c.minutes,
+                colorId: c.colorId,
+                soundId: c.soundId,
+                label: c.label,
+                running: c.glass.running,
+            }));
         }
 
         function applyPomodoroPreset() {
@@ -733,7 +753,8 @@
             isAutoMode() { return autoMode; },
             isSequenceActive() { return sequence.active; },
             getCardCount() { return cards.length; },
-            addDefaultCard,
+            addCardsFromConfigs,
+            getCardsSnapshot,
             applyPomodoroPreset,
             getFocusedCard,
             handleKeyToggle() { const c = getFocusedCard(); if (c) handleToggle(c); },
