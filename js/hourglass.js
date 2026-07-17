@@ -127,7 +127,9 @@
             this.elapsedMs = 0;
             this.running = false;
             this.lastFrameTimestamp = null;
+            this._runStartEpoch = null; // Date.now() at the start of the current run, offset back by elapsedMs already banked
             this.rafId = null;
+            this.onRunStateChange = null; // (running, remainingMs) — lets a caller keep a background alarm (e.g. a Worker) in sync
             this.flipRotationDeg = 0;
             this.parity = 0; // toggles each flip: which bulb currently drains vs fills
             this.resetOnFlip = false;
@@ -472,13 +474,43 @@
             if (this.running || this._done) return;
             this.running = true;
             this.lastFrameTimestamp = null;
+            // Elapsed is measured against this epoch from now on, not accumulated frame-by-frame,
+            // so a backgrounded/throttled tab still reads the correct value the instant it resumes.
+            // performance.now() (not Date.now()): monotonic, so a mid-session system clock change
+            // can't skew it, and it matches the clock the rest of this file already times against.
+            this._runStartEpoch = performance.now() - this.elapsedMs;
             this.rafId = requestAnimationFrame((t) => this._timerLoop(t));
+            this._notifyRunState();
         }
 
         pause() {
             this.running = false;
             if (this.rafId) cancelAnimationFrame(this.rafId);
             this.rafId = null;
+            this._notifyRunState();
+        }
+
+        // Time left, independent of whether a rAF frame has run recently.
+        getRemainingMs() {
+            const elapsed = this.running ? (performance.now() - this._runStartEpoch) : this.elapsedMs;
+            return this.durationMs - clamp(elapsed, 0, this.durationMs);
+        }
+
+        _notifyRunState() {
+            if (this.onRunStateChange) this.onRunStateChange(this.running, this.getRemainingMs());
+        }
+
+        // Called when a background alarm (Worker) fires because rAF never got a chance to
+        // (tab was hidden/throttled). No-op if the normal rAF path already finished on its own.
+        completeFromAlarm() {
+            if (this._done || this._flipPending) return;
+            this.pause();
+            this.elapsedMs = this.durationMs;
+            this._done = true;
+            this._updateSand(1);
+            this._clearParticles();
+            this._notifyTick();
+            if (this.onDone) this.onDone();
         }
 
         reset() {
@@ -664,10 +696,15 @@
         _timerLoop(timestamp) {
             if (!this.running) return;
             if (this.lastFrameTimestamp == null) this.lastFrameTimestamp = timestamp;
+            // rAF's own delta only ever drives grain physics now — capped at the call site so a
+            // throttled/backgrounded gap can't fling grains way past where they should land.
             const dt = timestamp - this.lastFrameTimestamp;
             this.lastFrameTimestamp = timestamp;
 
-            this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt);
+            // Elapsed comes from performance.now() directly, not from summing rAF deltas — a
+            // backgrounded tab that stops getting frames still reports the true elapsed time,
+            // computed from a single monotonic reading, the moment it resumes.
+            this.elapsedMs = clamp(performance.now() - this._runStartEpoch, 0, this.durationMs);
             const timeFrac = this.elapsedMs / this.durationMs;
             this._updateSand(timeFrac);
             this._stepParticles(Math.min(dt, MAX_PARTICLE_FRAME_MS));
@@ -677,6 +714,7 @@
             if (this.elapsedMs >= this.durationMs && this.particles.length === 0) {
                 this.running = false;
                 this._done = true;
+                this._notifyRunState();
                 if (this.onDone) this.onDone();
                 return;
             }

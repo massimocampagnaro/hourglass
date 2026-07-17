@@ -48,6 +48,12 @@
         let configuringId = null;
         const sequence = { active: false, index: -1 };
 
+        // Keeps each card's countdown alarm alive in a Worker so it still fires while the tab is backgrounded.
+        const timerAlarm = HourglassAlarm.createTimerAlarm((id) => {
+            const card = findCard(id);
+            if (card) card.glass.completeFromAlarm();
+        });
+
         // Real cards live in their own group; .hourglass-row is a 3-column grid that keeps it centered.
         const cardsWrapEl = document.createElement('div');
         cardsWrapEl.className = 'hourglass-cards';
@@ -290,10 +296,23 @@
             card.glass.onDone = () => {
                 card.timeEl.classList.add('is-done');
                 if (!muted) playSound(card.soundId);
+                HourglassAlarm.showDoneNotification(
+                    card.label ? `"${card.label}" done` : 'Hourglass done',
+                    'The sand has run out.'
+                );
                 refreshUI();
                 const idx = indexOfCard(card);
                 if (autoMode && sequence.active && sequence.index === idx) {
                     setTimeout(() => advanceSequence(idx), 900);
+                }
+            };
+            // Keeps the background alarm in sync with every start/pause/reset/flip, whatever triggered it.
+            card.glass.onRunStateChange = (running, remainingMs) => {
+                if (running) {
+                    timerAlarm.schedule(card.id, remainingMs);
+                    HourglassAlarm.ensureNotificationPermission();
+                } else {
+                    timerAlarm.cancel(card.id);
                 }
             };
         }
