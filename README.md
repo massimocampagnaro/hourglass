@@ -79,6 +79,16 @@ More params (more colors, etc.) may be added later; unset ones just fall back to
 
 Note this widget's own `sound` (on/off) is a separate, embed-only contract — it doesn't share meaning with the main app's `sound` param (a sound *choice*) described under [Shareable links](#shareable-links) above; each page defines its own params independently.
 
+Unlike the main app, the embed widget *does* support `autostart` — it's placed on a page precisely to run as part of that page's content, not pressed play on by hand. That reintroduces the same no-gesture problem though: this frame's own `sound=1` chime may be silently blocked by the browser until someone interacts with the widget directly (e.g. flips it). So on completion the widget also does `window.parent.postMessage({ source: 'hourglass-embed', type: 'done' }, '*')` — the host page has almost certainly had *some* interaction by then, so it's a more reliable place to raise an alert (a sound, a toast, whatever fits the host page) than the iframe itself:
+
+```js
+window.addEventListener('message', (e) => {
+    if (e.data && e.data.source === 'hourglass-embed' && e.data.type === 'done') {
+        // e.g. playYourOwnChime() or doSomething();
+    }
+});
+```
+
 ## How it works
 
 The glass silhouette is generated from a single smooth width-profile function (rim → shoulder → neck), sampled into an SVG path. The sand fill is derived from that same function, so the sand always sits flush against the glass walls. Sand levels are computed from the actual cross-sectional area of the bulb (not just a linear height), so the surface drops and the pile grows at a physically plausible, non-linear rate. A lightweight canvas layer draws the individual falling grains on top of the SVG. Each hourglass on the page is a fully independent instance — its own SVG, its own gradient ids, its own timer — so several can run side by side with different durations, colors and sounds without interfering with each other.
