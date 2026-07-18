@@ -49,6 +49,9 @@
         const cards = [];
         let configuringId = null;
         const sequence = { active: false, index: -1 };
+        // Keyboard-shortcut target: the last card explicitly toggled/reset/flipped — more durable
+        // than DOM focus, which drops the moment the user clicks anywhere outside a card.
+        let lastInteractedCard = null;
 
         // Keeps each card's countdown alarm alive in a Worker so it still fires while the tab is backgrounded.
         const timerAlarm = HourglassAlarm.createTimerAlarm(
@@ -472,6 +475,7 @@
 
         // ─── manual + automatic playback ────────────────────
         function handleToggle(card) {
+            lastInteractedCard = card;
             if (!autoMode) {
                 if (card.flipPending) return; // let the pending flip settle first
                 if (card.glass.running) {
@@ -494,6 +498,7 @@
         }
 
         function handleReset(card) {
+            lastInteractedCard = card;
             if (autoMode) {
                 stopSequence();
                 cards.forEach((c) => {
@@ -510,6 +515,7 @@
         }
 
         function handleShellClick(card) {
+            lastInteractedCard = card;
             if (autoMode || configuringId != null) return;
             card.timeEl.classList.remove('is-done');
             // flip() only actually resumes running after its spin/pour animation settles; commit the icon to that outcome now.
@@ -685,12 +691,19 @@
 
         // ─── public API ──────────────────────────────────────
         function getFocusedCard() {
+            // Automatic mode: only one card is ever "current" — the one actually running the
+            // sequence — so that always wins over whatever last had DOM focus or a manual click.
+            if (autoMode && sequence.active && cards[sequence.index]) return cards[sequence.index];
+
             const active = document.activeElement;
             const cardEl = active && active.closest && active.closest('.hourglass-card');
             if (cardEl) {
                 const card = findCard(cardEl.dataset.cardId);
                 if (card) return card;
             }
+
+            if (lastInteractedCard && cards.includes(lastInteractedCard)) return lastInteractedCard;
+
             return cards[0] || null;
         }
 

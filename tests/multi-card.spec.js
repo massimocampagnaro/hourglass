@@ -131,6 +131,22 @@ test('turning on automatic mode actually stops cards left running from manual mo
     await expect(cards.nth(0).locator('.time-readout')).toHaveText(before);
 });
 
+test('keyboard shortcuts remember the last card interacted with, even after focus moves elsewhere', async ({ page }) => {
+    await page.locator('.hourglass-card--add').click();
+    await page.locator('.hourglass-card.is-configuring [data-action="save"]').click();
+
+    const cards = page.locator('.hourglass-card:not(.hourglass-card--add)');
+    await cards.nth(1).locator('[data-action="toggle"]').click(); // start the second card
+
+    // click somewhere with no card, dropping DOM focus off the button
+    await page.locator('.site-header h1').click();
+    await page.keyboard.press('Space');
+
+    // Space paused the second card (last interacted), not the untouched first one
+    await expect(cards.nth(1).locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start');
+    await expect(cards.nth(0).locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start');
+});
+
 test('sizing scales with duration: a 25-minute card renders larger than a 5-minute one', async ({ page }) => {
     await page.locator('.hourglass-card--add').click();
     const configuring = page.locator('.hourglass-card.is-configuring');

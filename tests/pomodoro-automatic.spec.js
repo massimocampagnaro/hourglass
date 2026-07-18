@@ -47,6 +47,23 @@ test('automatic mode: play on a card starts the sequence, pause/resume/reset beh
     await expect(focus.locator('[data-action="edit"]')).toBeEnabled();
 });
 
+test('Space targets the active sequence card, not always the first one', async ({ page }) => {
+    await page.locator('#pomodoroBtn').click();
+    const focus = page.locator('.hourglass-card', { hasText: 'Focus' });
+    const brk = page.locator('.hourglass-card', { hasText: 'Break' });
+
+    // start the sequence on Break (the second card), not Focus
+    await brk.locator('[data-action="toggle"]').click();
+    await expect(brk).toHaveClass(/is-sequence-active/);
+
+    // move focus off the button so Space goes through our own targeting, not a native button re-click
+    await page.locator('.site-header h1').click();
+    await page.keyboard.press('Space');
+
+    await expect(brk).not.toHaveClass(/is-sequence-active/); // Break paused...
+    await expect(focus.locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start'); // ...Focus untouched
+});
+
 test('turning automatic mode off stops any running sequence', async ({ page }) => {
     await page.locator('#pomodoroBtn').click();
     const focus = page.locator('.hourglass-card', { hasText: 'Focus' });
