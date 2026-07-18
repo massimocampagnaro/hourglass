@@ -1,4 +1,4 @@
-// Default single-card behavior: a bare `index.html` visit or an old ?minutes=&autostart= link.
+// Default single-card behavior: a bare `index.html` visit or an old ?minutes=& link.
 const { test, expect } = require('@playwright/test');
 
 test.beforeEach(async ({ page }) => {
@@ -83,9 +83,9 @@ test('share button copies the current (packed) link to the clipboard', async ({ 
     expect(copiedText).toContain('?p=');
 });
 
-test('?minutes= and &autostart=1 still bootstrap a running custom card', async ({ page }) => {
+test('?minutes= still bootstraps a custom duration, but never autostarts (no gesture to unlock sound/notifications yet)', async ({ page }) => {
     await page.goto('/index.html?minutes=17&autostart=1');
     const card = page.locator('.hourglass-card:not(.hourglass-card--add)').first();
     await expect(card.locator('.time-readout')).toHaveText('17:00');
-    await expect(card.locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Pause');
+    await expect(card.locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start');
 });

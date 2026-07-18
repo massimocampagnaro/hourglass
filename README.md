@@ -31,7 +31,6 @@ For hand-written or bookmarked links, the verbose param contract below still wor
 With a single hourglass, it stays the same flat, minimal contract as before (and any old link from before Phase 2 still works), plus three new optional params:
 
 - `minutes`: starting duration in minutes, 1–180 (default 5)
-- `autostart`: `1` to start counting down immediately (default off)
 - `color`: one of `amber` (default), `ember`, `rose`, `violet`, `azure`, `teal`, `emerald`, `slate`
 - `sound`: one of `done` (default), `done2`, `done3` — see [Sounds](#sounds)
 - `label`: a short optional caption shown above the hourglass
@@ -46,7 +45,9 @@ With two or three hourglasses, each one's `minutes` / `color` / `sound` / `label
 
 A color or sound left unset on an indexed hourglass still auto-picks one not already used by another card in the link, the same way clicking **Add** does — only `minutes` is required per card. Any hourglass beyond the third is ignored.
 
-`auto=1` (automatic mode) is independent of all of the above and applies either way. There's no `autostart`/`running` equivalent for the indexed form — a shared multi-card link always opens ready to press play, rather than picking which card should already be mid-countdown.
+`auto=1` (automatic mode) is independent of all of the above and applies either way.
+
+No link — single or multi-card — ever autostarts a countdown on load (an old `autostart=1` is simply ignored). A browser won't let a page play its own "done" sound or show a notification without a prior click/keypress on that page, so every session here deliberately starts from a Play/Space/F press, which doubles as that unlock. The embed widget below is the exception, for reasons explained there.
 
 ## Embedding
 

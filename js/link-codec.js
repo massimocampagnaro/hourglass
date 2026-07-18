@@ -63,29 +63,28 @@
         }
     }
 
-    // ─── one card <-> "<autostart><minutes><color><sound><label>" ───
-    // No delimiters between fields: autostart/color/sound are fixed-width (1 char), minutes is a
-    // digit run that self-terminates at the color code, and label — always last — takes the rest.
-    function encodeCard(card, includeAutostart) {
-        const autostartBit = includeAutostart && card.running ? '1' : '0';
+    // ─── one card <-> "<minutes><color><sound><label>" ───
+    // No autostart field (see readCardsFromParams) and no delimiters needed between the others:
+    // color/sound are fixed-width (1 char), minutes self-terminates at the color code, and label
+    // — always last — just takes the rest.
+    function encodeCard(card) {
         const minutesDigits = String(clampMinutes(card.minutes));
         const colorCode = COLOR_CODE_BY_ID[card.colorId] || COLOR_CODE_BY_ID[DEFAULT_COLOR_ID];
         const soundCode = SOUND_CODE_BY_ID[card.soundId] || SOUND_CODE_BY_ID[DEFAULT_SOUND_ID];
-        return autostartBit + minutesDigits + colorCode + soundCode + labelToToken(card.label);
+        return minutesDigits + colorCode + soundCode + labelToToken(card.label);
     }
 
-    const CARD_TOKEN_RE = /^([01])(\d{1,3})([a-zA-Z])([a-zA-Z])(.*)$/;
+    const CARD_TOKEN_RE = /^(\d{1,3})([a-zA-Z])([a-zA-Z])(.*)$/;
 
     function decodeCardToken(token) {
         const match = CARD_TOKEN_RE.exec(token);
         if (!match) return null;
-        const [, autostartBit, minutesDigits, colorCode, soundCode, labelToken] = match;
+        const [, minutesDigits, colorCode, soundCode, labelToken] = match;
         return {
             minutes: clampMinutes(parseInt(minutesDigits, 10)),
             colorId: COLOR_ID_BY_CODE[colorCode] || null, // unknown code (e.g. a newer format) — caller auto-picks
             soundId: SOUND_ID_BY_CODE[soundCode] || null,
             label: sanitizeLabel(tokenToLabel(labelToken)),
-            running: autostartBit === '1',
         };
     }
 
@@ -93,9 +92,8 @@
     const CARD_SEPARATOR = '-'; // safe: the label alphabet above never produces one
 
     function encodeLinkParam(cards, autoMode) {
-        const includeAutostart = cards.length === 1;
         const header = FORMAT_VERSION + (autoMode ? '1' : '0');
-        const body = cards.slice(0, MAX_CARDS).map((card) => encodeCard(card, includeAutostart)).join(CARD_SEPARATOR);
+        const body = cards.slice(0, MAX_CARDS).map(encodeCard).join(CARD_SEPARATOR);
         return header + body;
     }
 
@@ -104,8 +102,6 @@
         const autoMode = raw[1] === '1';
         const cards = raw.slice(2).split(CARD_SEPARATOR).slice(0, MAX_CARDS).map(decodeCardToken).filter(Boolean);
         if (cards.length === 0) return null;
-        // same rule as the verbose h1_/h2_ format (readCardsFromParams): no autostart across a shared multi-card link
-        if (cards.length > 1) cards.forEach((c) => { c.running = false; });
         return { cards, autoMode };
     }
 

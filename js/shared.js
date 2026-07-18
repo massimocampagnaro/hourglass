@@ -107,8 +107,9 @@
     }
 
     // Row config from the URL: indexed h1_/h2_/h3_ form, or the flat legacy
-    // single-card ?minutes=&autostart=&color=&sound=&label= as a fallback.
-    // A missing/invalid color or sound comes back null, meaning auto-pick.
+    // single-card ?minutes=&color=&sound=&label= as a fallback. A missing/invalid color or sound
+    // comes back null, meaning auto-pick. No autostart — needs a user gesture to unlock sound/
+    // notifications first (see README); still lives on in readTimerParams for the embed widget.
     function readCardsFromParams(search) {
         const urlParams = new URLSearchParams(search);
         const autoParam = urlParams.get('auto');
@@ -127,14 +128,13 @@
                 colorId: isValidColorId(colorParam) ? colorParam : null,
                 soundId: isValidSoundId(soundParam) ? soundParam : null,
                 label: sanitizeLabel(urlParams.get(prefix + 'label')),
-                running: false, // no auto-start concept for multi-card links — see README
             });
         }
         if (indexedCards.length > 0) {
             return { cards: indexedCards, autoMode };
         }
 
-        const { minutes, autostart } = readTimerParams(search);
+        const { minutes } = readTimerParams(search);
         const colorParam = urlParams.get('color');
         const soundParam = urlParams.get('sound');
         return {
@@ -143,7 +143,6 @@
                 colorId: isValidColorId(colorParam) ? colorParam : null,
                 soundId: isValidSoundId(soundParam) ? soundParam : null,
                 label: sanitizeLabel(urlParams.get('label')),
-                running: autostart,
             }],
             autoMode,
         };
@@ -161,7 +160,6 @@
             if (card.colorId && card.colorId !== COLOR_PALETTE[0].id) params.set('color', card.colorId);
             if (card.soundId && card.soundId !== DEFAULT_SOUND_ID) params.set('sound', card.soundId);
             if (card.label) params.set('label', sanitizeLabel(card.label));
-            if (card.running) params.set('autostart', '1');
         } else {
             cards.slice(0, MAX_CARDS).forEach((card, i) => {
                 const prefix = `h${i + 1}_`;

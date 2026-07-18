@@ -692,6 +692,7 @@
         }
 
         // Bootstraps the row from parsed URL config; null colorId/soundId auto-picks like the Add button does.
+        // Never autostarts from a URL — see readCardsFromParams for why.
         function addCardsFromConfigs(configs) {
             configs.slice(0, MAX_CARDS).forEach((cfg) => {
                 const card = {
@@ -704,7 +705,6 @@
                 };
                 cards.push(card);
                 buildCardDom(card);
-                if (cfg.running) card.glass.start();
             });
             updateRowLayout();
             refreshUI();

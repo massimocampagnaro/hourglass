@@ -55,11 +55,11 @@ test('a multi-card row packs into a much shorter URL and round-trips through a r
     await expect(cards.nth(1).locator('.card-label')).toHaveText('Reading time');
 });
 
-test('legacy ?minutes=&autostart= links still work unchanged', async ({ page }) => {
+test('legacy ?minutes=&autostart= links still set the duration, but autostart is a no-op now', async ({ page }) => {
     await page.goto('/index.html?minutes=17&autostart=1');
     const card = page.locator('.hourglass-card:not(.hourglass-card--add)').first();
     await expect(card.locator('.time-readout')).toHaveText('17:00');
-    await expect(card.locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Pause');
+    await expect(card.locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start');
 });
 
 test('the Pomodoro preset URL round-trips through a fresh page load', async ({ page }) => {
@@ -105,8 +105,8 @@ test('buildVerboseSearchParams still round-trips through readCardsFromParams (ke
     await page.goto('/index.html');
     const result = await page.evaluate(() => {
         const cards = [
-            { minutes: 45, colorId: 'azure', soundId: 'done2', label: 'Reading', running: false },
-            { minutes: 10, colorId: 'emerald', soundId: 'done', label: '', running: false },
+            { minutes: 45, colorId: 'azure', soundId: 'done2', label: 'Reading' },
+            { minutes: 10, colorId: 'emerald', soundId: 'done', label: '' },
         ];
         const search = '?' + window.HourglassShared.buildVerboseSearchParams(cards, true).toString();
         return { search, decoded: window.HourglassShared.readCardsFromParams(search) };
@@ -115,8 +115,8 @@ test('buildVerboseSearchParams still round-trips through readCardsFromParams (ke
     expect(result.search).toContain('auto=1');
     expect(result.decoded.autoMode).toBe(true);
     expect(result.decoded.cards).toEqual([
-        { minutes: 45, colorId: 'azure', soundId: 'done2', label: 'Reading', running: false },
-        { minutes: 10, colorId: 'emerald', soundId: 'done', label: '', running: false },
+        { minutes: 45, colorId: 'azure', soundId: 'done2', label: 'Reading' },
+        { minutes: 10, colorId: 'emerald', soundId: 'done', label: '' },
     ]);
 });
 
