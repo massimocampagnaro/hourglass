@@ -113,6 +113,24 @@ test('removing a card works, but not down to zero', async ({ page }) => {
     expect(removeDisabled).toBe(true);
 });
 
+test('turning on automatic mode actually stops cards left running from manual mode, not just their icon', async ({ page }) => {
+    await page.locator('.hourglass-card--add').click();
+    await page.locator('.hourglass-card.is-configuring [data-action="save"]').click();
+
+    const cards = page.locator('.hourglass-card:not(.hourglass-card--add)');
+    await cards.nth(0).locator('[data-action="toggle"]').click();
+    await cards.nth(1).locator('[data-action="toggle"]').click();
+
+    await page.getByText('Automatic mode').click();
+    await expect(cards.nth(0).locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start');
+    await expect(cards.nth(1).locator('[data-action="toggle"]')).toHaveAttribute('aria-label', 'Start');
+
+    // the icon alone isn't proof — check the countdown itself actually froze
+    const before = await cards.nth(0).locator('.time-readout').textContent();
+    await page.waitForTimeout(1500);
+    await expect(cards.nth(0).locator('.time-readout')).toHaveText(before);
+});
+
 test('sizing scales with duration: a 25-minute card renders larger than a 5-minute one', async ({ page }) => {
     await page.locator('.hourglass-card--add').click();
     const configuring = page.locator('.hourglass-card.is-configuring');

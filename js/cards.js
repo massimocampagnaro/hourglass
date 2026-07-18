@@ -760,8 +760,12 @@
                 v = !!v && cards.length > 1; // needs at least 2 cards to mean anything
                 if (v === autoMode) return;
                 autoMode = v;
-                if (!autoMode) stopSequence(); // stopSequence() already runs refreshUI()
-                else refreshUI();
+                if (!autoMode) {
+                    stopSequence(); // stopSequence() already runs refreshUI()
+                } else {
+                    cards.forEach((c) => c.glass.pause()); // no sequence card chosen yet — stop anything still running manually
+                    refreshUI();
+                }
             },
             isAutoMode() { return autoMode; },
             isSequenceActive() { return sequence.active; },
