@@ -12,13 +12,17 @@
     // Captured now — document.currentScript is null once called later from click/timer handlers.
     const SCRIPT_URL = document.currentScript.src;
 
-    // One shared Worker for every hourglass on the page, alarms keyed by card id.
-    function createTimerAlarm(onAlarm) {
+    // One shared Worker for every hourglass on the page, alarms keyed by card id. onTick fires
+    // ~once/sec while anything's running, worker-driven so it keeps going in a hidden tab too.
+    function createTimerAlarm(onAlarm, onTick) {
         let worker = null;
         try {
             worker = new Worker(new URL('timer-worker.js', SCRIPT_URL));
             worker.onmessage = (event) => {
-                if (event.data && event.data.type === 'done') onAlarm(event.data.id);
+                const data = event.data;
+                if (!data) return;
+                if (data.type === 'done') onAlarm(data.id);
+                else if (data.type === 'tick' && onTick) onTick();
             };
         } catch {
             worker = null; // Workers unavailable (e.g. served over file://) — degrade to foreground-only timing

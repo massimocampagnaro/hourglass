@@ -51,10 +51,13 @@
         const sequence = { active: false, index: -1 };
 
         // Keeps each card's countdown alarm alive in a Worker so it still fires while the tab is backgrounded.
-        const timerAlarm = HourglassAlarm.createTimerAlarm((id) => {
-            const card = findCard(id);
-            if (card) card.glass.completeFromAlarm();
-        });
+        const timerAlarm = HourglassAlarm.createTimerAlarm(
+            (id) => {
+                const card = findCard(id);
+                if (card) card.glass.completeFromAlarm();
+            },
+            () => syncDocumentTitle(), // keeps the tab title counting down even while hidden (rAF stops there)
+        );
 
         // Real cards live in their own group; .hourglass-row is a 3-column grid that keeps it centered.
         const cardsWrapEl = document.createElement('div');
