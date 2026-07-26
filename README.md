@@ -71,6 +71,7 @@ Query params (all optional):
 
 - `minutes`: starting duration in minutes, 1–180 (default 5)
 - `autostart`: `1` or `true` to start counting down immediately (default off)
+- `delay`: seconds to wait before `autostart` actually starts the countdown, 0–3600 (default 0). No effect without `autostart` — a manual flip always starts right away
 - `theme`: `light` for embedding on a light page (darkens the time text; the hourglass itself is unchanged). Default is the dark theme above.
 - `sound`: `1` to play a chime when the timer finishes (default off — silent unless asked for)
 - `keepsand`: `1` to make flipping pour the actual sand across instead of resetting it (default off — flip always starts the next run fresh)

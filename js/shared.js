@@ -25,7 +25,9 @@
         const minutes = clampMinutes(Number.isFinite(minutesParam) ? minutesParam : 5);
         const autostartParam = urlParams.get('autostart');
         const autostart = autostartParam === '1' || autostartParam === 'true';
-        return { minutes, autostart };
+        const delayParam = parseInt(urlParams.get('delay'), 10);
+        const delaySeconds = Math.max(0, Math.min(3600, Number.isFinite(delayParam) ? delayParam : 0));
+        return { minutes, autostart, delaySeconds };
     }
 
     // Damped size scaling (sqrt + high floor) — proportion should be felt, not literal.

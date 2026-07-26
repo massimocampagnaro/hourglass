@@ -53,7 +53,10 @@
         glass.flip();
     });
 
-    const { minutes, autostart } = HourglassShared.readTimerParams(window.location.search);
+    const { minutes, autostart, delaySeconds } = HourglassShared.readTimerParams(window.location.search);
     glass.setDuration(minutes);
-    if (autostart) glass.start();
+    if (autostart) {
+        if (delaySeconds > 0) setTimeout(() => glass.start(), delaySeconds * 1000);
+        else glass.start();
+    }
 })();
