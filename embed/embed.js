@@ -16,6 +16,13 @@
         document.body.dataset.theme = 'light';
     }
 
+    // ?show=hourglass|time to drop one half of the widget (see css/embed.css); default shows both.
+    // "time" still runs the full hourglass underneath, just hidden — it drives onTick/onDone either way.
+    const showParam = params.get('show');
+    if (showParam === 'hourglass' || showParam === 'time') {
+        document.body.dataset.show = showParam;
+    }
+
     // Both off by default — no in-widget control to toggle them.
     const soundEnabled = params.get('sound') === '1';
     const keepSand = params.get('keepsand') === '1'; // same as the main app's "keep sand on flip" toggle

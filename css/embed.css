@@ -7,6 +7,10 @@ html, body.embed-body {
     overflow: hidden;
 }
 
+:root {
+    color-scheme: normal;
+}
+
 body.embed-body {
     min-height: 0;
     height: 100vh;
@@ -22,6 +26,15 @@ body.embed-body {
 .embed-body .hourglass-shell {
     width: min(60vw, 40vh, 200px); /* 40vh * 1.75 aspect ratio = 70% max, leaving room for padding/gap/time */
     filter: none;
+}
+
+/* ?show=hourglass|time — drop one half of the widget; default (unset) shows both. */
+.embed-body[data-show="hourglass"] .time-readout {
+    display: none;
+}
+
+.embed-body[data-show="time"] .hourglass-shell {
+    display: none;
 }
 
 /* ?theme=light — only the time text's color flips, the hourglass stays the same. */
