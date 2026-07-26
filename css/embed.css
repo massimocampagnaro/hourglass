@@ -25,7 +25,6 @@ body.embed-body {
 
 .embed-body .hourglass-shell {
     width: min(60vw, 40vh, 200px); /* 40vh * 1.75 aspect ratio = 70% max, leaving room for padding/gap/time */
-    filter: none;
 }
 
 /* ?show=hourglass|time — drop one half of the widget; default (unset) shows both. */
